@@ -52,13 +52,15 @@ Reload the extension from `chrome://extensions` after rebuilding it.
 
 ## Development
 
+The complete behavior contract, architecture, failure handling, security constraints, selector strategy, and manual regression checklist are in [spec.md](spec.md).
+
+Run the full automated validation suite with:
+
 ```sh
 npm run check
 ```
 
-This runs TypeScript checking, ESLint, unit tests with the dot reporter, and the esbuild production build. Generated scripts are written to `dist/`.
-
-See [spec.md](spec.md) for the behavior contract, architecture, failure handling, security constraints, selector strategy, and verified manual test checklist.
+Generated scripts are written to `dist/`; do not edit them directly.
 
 ## Privacy and compatibility
 

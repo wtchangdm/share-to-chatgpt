@@ -210,22 +210,24 @@ A missing assistant-message marker after a confirmed submission is nonfatal: the
 - No browsing data or ChatGPT content is sent to third-party servers.
 - Assistant message content is checked only for non-emptiness and is never stored.
 
-## Verified manual test checklist
+## Manual regression checklist
 
-- [x] Log in to `https://chatgpt.com` normally.
-- [x] On a non-ChatGPT page, click the toolbar button once.
-- [x] Confirm the original tab remains selected throughout.
-- [x] Confirm one background ChatGPT tab opens with the page URL in the composer and submits one initial message.
-- [x] Confirm no Enter key or second click is needed and the ChatGPT tab remains open when auto-close is disabled.
-- [x] Right-click a link, choose **Send link to ChatGPT**, and confirm the linked URL—not the current page URL—is submitted.
-- [x] Save prepend text in **Options**, send a page, and verify `text + space + URL`.
-- [x] Save append text, send a link, and verify `URL + space + text`.
-- [x] Trigger two dispatches close together and verify each target tab submits its own prompt once.
-- [x] Log out of ChatGPT or block the composer, dispatch again, and confirm no prompt is submitted, the tab remains open, and a red `!` badge or error appears.
-- [x] Open an unrelated ChatGPT tab and confirm it does not auto-submit anything.
-- [x] Disable automatic submission and confirm the correct prompt is prefilled but not submitted.
-- [x] Enable automatic closing and confirm the background tab closes only after the first assistant text appears.
-- [x] Reload the extension and confirm automation settings retain their saved values.
+Run the cases relevant to a change and report which cases were verified in the current build. The checklist records required coverage, not historical test status.
+
+- Log in to `https://chatgpt.com` normally.
+- On a non-ChatGPT page, click the toolbar button once.
+- Confirm the original tab remains selected throughout.
+- Confirm one background ChatGPT tab opens with the page URL in the composer and submits one initial message.
+- Confirm no Enter key or second click is needed and the ChatGPT tab remains open when auto-close is disabled.
+- Right-click a link, choose **Send link to ChatGPT**, and confirm the linked URL—not the current page URL—is submitted.
+- Save prepend text in **Options**, send a page, and verify `text + space + URL`.
+- Save append text, send a link, and verify `URL + space + text`.
+- Trigger two dispatches close together and verify each target tab submits its own prompt once.
+- Log out of ChatGPT or block the composer, dispatch again, and confirm no prompt is submitted, the tab remains open, and a red `!` badge or error appears.
+- Open an unrelated ChatGPT tab and confirm it does not auto-submit anything.
+- Disable automatic submission and confirm the correct prompt is prefilled but not submitted.
+- Enable automatic closing and confirm the background tab closes only after the first assistant text appears.
+- Reload the extension and confirm automation settings retain their saved values.
 
 ## Inherently fragile behavior
 
