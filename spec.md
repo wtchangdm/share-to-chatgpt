@@ -34,7 +34,7 @@ The **Send link to ChatGPT** menu item appears for links and follows the same wo
 
 ### Hovered-link shortcut
 
-While a link is hovered in the active page, `Command+B` on macOS or `Ctrl+B` on other platforms follows the link context-menu workflow using that link's resolved URL. The command queries only `a[href]:hover` in the main frame at invocation time, chooses the deepest matching anchor, and otherwise fails closed without opening ChatGPT. Injection failures and the absence of a hovered link produce a local console error and a red `!` badge on the active tab.
+While a link is hovered in the active page, `Command+B` on macOS or `Ctrl+B` on other platforms follows the link context-menu workflow using that link's resolved URL. The command queries only `a[href]:hover` in the main frame at invocation time, recursively follows open shadow roots on the hovered element path, chooses the deepest matching anchor, and otherwise fails closed without opening ChatGPT. It does not inspect closed shadow roots or child frames. Injection failures and the absence of a hovered link produce a local console error and a red `!` badge on the active tab.
 
 The shortcut is a suggested default, not a setting stored by the extension. Users can customize or disable it through `chrome://extensions/shortcuts`.
 

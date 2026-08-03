@@ -125,14 +125,54 @@ test("the shortcut reads the resolved URL of the hovered link", () => {
     configurable: true,
     value: {
       querySelectorAll(selector: string) {
-        assert.equal(selector, "a[href]:hover");
-        return links;
+        if (selector === "a[href]:hover") {
+          return links;
+        }
+        assert.equal(selector, ":hover");
+        return [];
       }
     }
   });
 
   try {
     assert.equal(getHoveredLinkUrl(), "https://example.com/inner");
+  } finally {
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: originalDocument
+    });
+  }
+});
+
+test("the shortcut reads a hovered link inside an open shadow root", () => {
+  const originalDocument = globalThis.document;
+  const shadowRoot = {
+    querySelectorAll(selector: string) {
+      if (selector === "a[href]:hover") {
+        return [{ href: "https://www.reddit.com/r/example/comments/post/comment/id/" }];
+      }
+      assert.equal(selector, ":hover");
+      return [];
+    }
+  };
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: {
+      querySelectorAll(selector: string) {
+        if (selector === "a[href]:hover") {
+          return [];
+        }
+        assert.equal(selector, ":hover");
+        return [{ shadowRoot }];
+      }
+    }
+  });
+
+  try {
+    assert.equal(
+      getHoveredLinkUrl(),
+      "https://www.reddit.com/r/example/comments/post/comment/id/"
+    );
   } finally {
     Object.defineProperty(globalThis, "document", {
       configurable: true,
