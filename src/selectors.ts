@@ -1,5 +1,7 @@
 export type ComposerElement = HTMLTextAreaElement | HTMLElement;
 
+export const ASSISTANT_MESSAGE_SELECTOR = '[data-message-author-role="assistant"]';
+
 export const SEND_BUTTON_SELECTORS = [
   'button[data-testid="send-button"]',
   'button[aria-label="Send prompt"]',
@@ -67,4 +69,9 @@ export function readComposerText(composer: ComposerElement): string {
   }
 
   return composer.innerText || composer.textContent || "";
+}
+
+export function countStartedAssistantMessages(): number {
+  return Array.from(document.querySelectorAll(ASSISTANT_MESSAGE_SELECTOR))
+    .filter((message) => message.textContent?.trim()).length;
 }

@@ -1,5 +1,5 @@
-import { isChatGPTConversationUrl } from "./prompt";
 import {
+  countStartedAssistantMessages,
   findComposer,
   findComposerForm,
   findSendButton,
@@ -13,7 +13,7 @@ const MARKER_PREFIX = "#share-to-chatgpt-dispatch=";
 const PREFILL_GRACE_MS = 4_000;
 const PROMPT_UPDATE_TIMEOUT_MS = 3_000;
 const SUBMISSION_CONFIRM_TIMEOUT_MS = 2_000;
-const CONVERSATION_URL_TIMEOUT_MS = 5_000;
+const ASSISTANT_MESSAGE_TIMEOUT_MS = 10_000;
 
 function takeDispatchId(): string | null {
   if (!location.hash.startsWith(MARKER_PREFIX)) {
@@ -242,6 +242,7 @@ async function runDispatch(dispatchId: string): Promise<void> {
       throw new Error(armed.error);
     }
 
+    const assistantMessageCount = countStartedAssistantMessages();
     submitPrompt(ready.composer, ready.button);
 
     const submitted = await waitFor(() => {
@@ -259,14 +260,14 @@ async function runDispatch(dispatchId: string): Promise<void> {
 
     let closeTab = false;
     if (claimedDispatch.autoClose) {
-      const conversationReady = await waitFor(
-        () => isChatGPTConversationUrl(location.href) ? true : null,
-        Math.min(deadline - 500, Date.now() + CONVERSATION_URL_TIMEOUT_MS)
+      const responseStarted = await waitFor(
+        () => countStartedAssistantMessages() > assistantMessageCount ? true : null,
+        Math.min(deadline - 500, Date.now() + ASSISTANT_MESSAGE_TIMEOUT_MS)
       );
-      closeTab = conversationReady === true;
+      closeTab = responseStarted === true;
       if (!closeTab) {
         console.error(
-          "[Share to ChatGPT] Submission succeeded, but the conversation URL did not appear " +
+          "[Share to ChatGPT] Submission succeeded, but an assistant message did not start " +
           "before timeout; leaving the tab open."
         );
       }

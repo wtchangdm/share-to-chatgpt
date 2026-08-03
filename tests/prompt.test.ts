@@ -5,10 +5,12 @@ import {
   buildChatGPTUrl,
   buildPrompt,
   DEFAULT_SETTINGS,
-  isChatGPTConversationUrl,
   normalizeSettings
 } from "../src/prompt";
-import { SEND_BUTTON_SELECTORS } from "../src/selectors";
+import {
+  ASSISTANT_MESSAGE_SELECTOR,
+  SEND_BUTTON_SELECTORS
+} from "../src/selectors";
 
 const pageUrl = "https://example.com/articles/one?x=1&y=two#section";
 
@@ -75,12 +77,11 @@ test("a transient dispatch marker is added without changing the prompt query", (
   );
 });
 
-test("only ChatGPT conversation URLs qualify for automatic closing", () => {
-  assert.equal(isChatGPTConversationUrl("https://chatgpt.com/c/conversation-id"), true);
-  assert.equal(isChatGPTConversationUrl("https://chatgpt.com/c/conversation-id/"), true);
-  assert.equal(isChatGPTConversationUrl("https://chatgpt.com/?prompt=test"), false);
-  assert.equal(isChatGPTConversationUrl("https://example.com/c/conversation-id"), false);
-  assert.equal(isChatGPTConversationUrl("not a URL"), false);
+test("automatic closing uses the scoped assistant-message marker", () => {
+  assert.equal(
+    ASSISTANT_MESSAGE_SELECTOR,
+    '[data-message-author-role="assistant"]'
+  );
 });
 
 test("the manifest requests only the required extension permissions", () => {

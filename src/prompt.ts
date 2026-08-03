@@ -40,12 +40,3 @@ export function buildChatGPTUrl(prompt: string, dispatchId?: string): string {
     ? `${deepLink}#share-to-chatgpt-dispatch=${encodeURIComponent(dispatchId)}`
     : deepLink;
 }
-
-export function isChatGPTConversationUrl(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.origin === "https://chatgpt.com" && /^\/c\/[^/]+\/?$/.test(url.pathname);
-  } catch {
-    return false;
-  }
-}
