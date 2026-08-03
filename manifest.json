@@ -6,6 +6,7 @@
   "permissions": [
     "activeTab",
     "contextMenus",
+    "scripting",
     "storage"
   ],
   "host_permissions": [
@@ -16,6 +17,15 @@
   },
   "action": {
     "default_title": "Send this page to ChatGPT"
+  },
+  "commands": {
+    "send-hovered-link-to-chatgpt": {
+      "description": "Send the hovered link to ChatGPT",
+      "suggested_key": {
+        "default": "Ctrl+B",
+        "mac": "Command+B"
+      }
+    }
   },
   "content_scripts": [
     {

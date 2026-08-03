@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { getHoveredLinkUrl } from "../src/hovered-link";
 import {
   buildChatGPTUrl,
   buildPrompt,
@@ -89,7 +90,76 @@ test("the manifest requests only the required extension permissions", () => {
     permissions?: string[];
   };
 
-  assert.deepEqual(manifest.permissions, ["activeTab", "contextMenus", "storage"]);
+  assert.deepEqual(manifest.permissions, [
+    "activeTab",
+    "contextMenus",
+    "scripting",
+    "storage"
+  ]);
+});
+
+test("the hovered-link command has a customizable cross-platform default", () => {
+  const manifest = JSON.parse(readFileSync("manifest.json", "utf8")) as {
+    commands?: Record<string, {
+      description?: string;
+      suggested_key?: { default?: string; mac?: string };
+    }>;
+  };
+
+  assert.deepEqual(manifest.commands?.["send-hovered-link-to-chatgpt"], {
+    description: "Send the hovered link to ChatGPT",
+    suggested_key: {
+      default: "Ctrl+B",
+      mac: "Command+B"
+    }
+  });
+});
+
+test("the shortcut reads the resolved URL of the hovered link", () => {
+  const originalDocument = globalThis.document;
+  const links = [
+    { href: "https://example.com/outer" },
+    { href: "https://example.com/inner" }
+  ];
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: {
+      querySelectorAll(selector: string) {
+        assert.equal(selector, "a[href]:hover");
+        return links;
+      }
+    }
+  });
+
+  try {
+    assert.equal(getHoveredLinkUrl(), "https://example.com/inner");
+  } finally {
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: originalDocument
+    });
+  }
+});
+
+test("the shortcut fails closed when no link is hovered", () => {
+  const originalDocument = globalThis.document;
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: {
+      querySelectorAll() {
+        return [];
+      }
+    }
+  });
+
+  try {
+    assert.equal(getHoveredLinkUrl(), null);
+  } finally {
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: originalDocument
+    });
+  }
 });
 
 test("exact Send controls take priority over a generic submit button", () => {

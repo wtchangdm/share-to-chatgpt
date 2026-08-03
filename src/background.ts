@@ -1,3 +1,4 @@
+import { getHoveredLinkUrl } from "./hovered-link";
 import { buildChatGPTUrl, buildPrompt, normalizeSettings } from "./prompt";
 import type {
   ContentMessage,
@@ -129,6 +130,32 @@ async function createDispatch(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await failDispatch(dispatch, `Could not open ChatGPT: ${message}`);
+  }
+}
+
+async function shareHoveredLink(tab: chrome.tabs.Tab): Promise<void> {
+  if (tab.id === undefined) {
+    console.error("[Share to ChatGPT] The active tab ID is unavailable.");
+    return;
+  }
+
+  await setBadge(tab.id, "");
+
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: getHoveredLinkUrl
+    });
+    const hoveredUrl = results[0]?.result;
+    if (typeof hoveredUrl !== "string" || hoveredUrl.length === 0) {
+      throw new Error("No link is currently hovered in the active page.");
+    }
+
+    await createDispatch(hoveredUrl, tab.title ?? "", tab.id);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    console.error(`[Share to ChatGPT] Could not send the hovered link: ${detail}`);
+    await setBadge(tab.id, "!");
   }
 }
 
@@ -272,6 +299,12 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   }
 
   void createDispatch(info.linkUrl, tab?.title ?? "", tab?.id);
+});
+
+chrome.commands.onCommand.addListener((command, tab) => {
+  if (command === "send-hovered-link-to-chatgpt") {
+    void shareHoveredLink(tab);
+  }
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {

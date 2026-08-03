@@ -32,6 +32,12 @@ https://chatgpt.com/?prompt=<encoded target URL>
 
 The **Send link to ChatGPT** menu item appears for links and follows the same workflow using `info.linkUrl` instead of the active page URL.
 
+### Hovered-link shortcut
+
+While a link is hovered in the active page, `Command+B` on macOS or `Ctrl+B` on other platforms follows the link context-menu workflow using that link's resolved URL. The command queries only `a[href]:hover` in the main frame at invocation time, chooses the deepest matching anchor, and otherwise fails closed without opening ChatGPT. Injection failures and the absence of a hovered link produce a local console error and a red `!` badge on the active tab.
+
+The shortcut is a suggested default, not a setting stored by the extension. Users can customize or disable it through `chrome://extensions/shortcuts`.
+
 ## Settings
 
 Settings are stored under `settings` in `chrome.storage.local`.
@@ -49,12 +55,13 @@ A blank optional-text value produces the exact bookmarklet prompt. Non-empty opt
 
 ```text
 src/
-  background.ts  Service worker, context menu, dispatch state, badges, tab lifecycle
-  content.ts     ChatGPT readiness, prompt verification/injection, submission
-  options.ts     Local settings UI
-  prompt.ts      Settings normalization and prompt/deep-link construction
-  selectors.ts   Isolated ChatGPT DOM selectors
-  types.ts       Settings, dispatch, and message types
+  background.ts    Service worker, commands, context menu, dispatch state, badges, tab lifecycle
+  content.ts       ChatGPT readiness, prompt verification/injection, submission
+  hovered-link.ts  Invocation-time hovered-link lookup for the active page
+  options.ts       Local settings UI
+  prompt.ts        Settings normalization and prompt/deep-link construction
+  selectors.ts     Isolated ChatGPT DOM selectors
+  types.ts         Settings, dispatch, and message types
 ```
 
 The extension uses no framework. esbuild bundles the three browser entry points into `dist/`.
@@ -66,6 +73,7 @@ The extension uses no framework. esbuild bundles the three browser entry points 
   "permissions": [
     "activeTab",
     "contextMenus",
+    "scripting",
     "storage"
   ],
   "host_permissions": [
@@ -74,7 +82,7 @@ The extension uses no framework. esbuild bundles the three browser entry points 
 }
 ```
 
-The content script is statically limited to `https://chatgpt.com/*` and runs at `document_start` so it can capture the temporary dispatch marker before the client-rendered application changes history.
+The content script is statically limited to `https://chatgpt.com/*` and runs at `document_start` so it can capture the temporary dispatch marker before the client-rendered application changes history. The `scripting` permission is used only when the hovered-link command is invoked; `activeTab` grants temporary access to inspect the active page without persistent all-sites host access.
 
 No all-sites permission, paid OpenAI API, ChatGPT `/backend-api/` access, or third-party telemetry is permitted.
 
@@ -191,6 +199,7 @@ On final failure:
 
 Handled conditions include:
 
+- A hovered-link shortcut invoked without a hovered link or on a page where Chrome forbids script injection.
 - Logged-out sessions.
 - Interstitials or challenges.
 - Missing composer.
@@ -220,6 +229,9 @@ Run the cases relevant to a change and report which cases were verified in the c
 - Confirm one background ChatGPT tab opens with the page URL in the composer and submits one initial message.
 - Confirm no Enter key or second click is needed and the ChatGPT tab remains open when auto-close is disabled.
 - Right-click a link, choose **Send link to ChatGPT**, and confirm the linked URL—not the current page URL—is submitted.
+- Hover over a link, press the configured shortcut, and confirm the linked URL—not the current page URL—is submitted.
+- Press the shortcut without hovering a link and on a Chrome-restricted page; confirm no ChatGPT tab opens and a red `!` badge or error appears.
+- Change the shortcut through `chrome://extensions/shortcuts`, reload the extension, and confirm the new shortcut triggers the same hovered-link workflow.
 - Save prepend text in **Options**, send a page, and verify `text + space + URL`.
 - Save append text, send a link, and verify `URL + space + text`.
 - Trigger two dispatches close together and verify each target tab submits its own prompt once.
