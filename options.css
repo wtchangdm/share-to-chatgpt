@@ -1,0 +1,71 @@
+:root {
+  color-scheme: light dark;
+  font: 14px/1.5 system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  box-sizing: border-box;
+  max-width: 560px;
+  padding: 20px;
+}
+
+h1 {
+  font-size: 20px;
+  margin: 0 0 8px;
+}
+
+p {
+  margin: 0 0 20px;
+}
+
+form {
+  display: grid;
+  gap: 8px;
+}
+
+textarea,
+select,
+button {
+  font: inherit;
+}
+
+textarea {
+  box-sizing: border-box;
+  resize: vertical;
+  width: 100%;
+}
+
+select {
+  margin-bottom: 8px;
+  width: max-content;
+}
+
+fieldset {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+
+.checkbox {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.checkbox:has(input:disabled) {
+  opacity: 0.6;
+}
+
+.actions {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+output {
+  min-height: 1.5em;
+}

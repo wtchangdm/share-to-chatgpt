@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Share to ChatGPT options</title>
+    <link rel="stylesheet" href="options.css">
+  </head>
+  <body>
+    <main>
+      <h1>Share to ChatGPT</h1>
+      <p>The toolbar button always sends immediately. This optional text is added to future page and link prompts.</p>
+      <form id="settings-form">
+        <label for="optional-text">Optional text</label>
+        <textarea id="optional-text" rows="5" placeholder="For example: Summarize this page"></textarea>
+
+        <label for="placement">Placement</label>
+        <select id="placement">
+          <option value="prepend">Before the URL</option>
+          <option value="append">After the URL</option>
+        </select>
+
+        <fieldset>
+          <legend>Automation</legend>
+          <label class="checkbox" for="auto-submit">
+            <input id="auto-submit" type="checkbox">
+            Automatically submit the prompt
+          </label>
+          <label class="checkbox" for="auto-close">
+            <input id="auto-close" type="checkbox">
+            Close the ChatGPT tab after the conversation URL appears
+          </label>
+        </fieldset>
+
+        <div class="actions">
+          <button type="submit">Save</button>
+          <output id="status" aria-live="polite"></output>
+        </div>
+      </form>
+    </main>
+    <script src="dist/options.js"></script>
+  </body>
+</html>
