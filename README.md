@@ -13,7 +13,7 @@ javascript:(()=>{window.open(`https://chatgpt.com/?prompt=${encodeURIComponent(l
 - Opens ChatGPT in a background tab.
 - Sends the active page URL from the toolbar button.
 - Adds **Send link to ChatGPT** to link context menus.
-- Sends a hovered link with `Command+B` on macOS or `Ctrl+B` on other platforms.
+- Sends a hovered link—or the current page when no link is hovered—with `Command+B` on macOS or `Ctrl+B` on other platforms.
 - Supports optional text before or after the URL.
 - Can prefill without submitting.
 - Can close the ChatGPT tab after ChatGPT starts responding.
@@ -43,8 +43,8 @@ Reload the extension from `chrome://extensions` after rebuilding it.
 
 - Click the toolbar button to send the active page URL.
 - Right-click a link and select **Send link to ChatGPT** to send that link URL.
-- Hover over a link and press `Command+B` on macOS or `Ctrl+B` on other platforms to send the link URL.
-- Customize or disable the hovered-link shortcut at `chrome://extensions/shortcuts`.
+- Press `Command+B` on macOS or `Ctrl+B` on other platforms to send the hovered link URL, or the current page URL when no link is hovered.
+- Customize or disable the shortcut at `chrome://extensions/shortcuts`.
 - Right-click the extension icon and select **Options** to configure prompt text and automation.
 
 | Option | Default | Behavior |
@@ -67,6 +67,6 @@ Generated scripts are written to `dist/`; do not edit them directly.
 
 ## Privacy and compatibility
 
-Settings and dispatch state stay in local Chrome extension storage. Browsing data and prompts are not sent to third-party services; the only external action is normal navigation to `chatgpt.com`. The hovered-link shortcut inspects the active page only when pressed, using Chrome's temporary `activeTab` access; the extension has no persistent all-sites access.
+Settings and dispatch state stay in local Chrome extension storage. Browsing data and prompts are not sent to third-party services; the only external action is normal navigation to `chatgpt.com`. The shortcut inspects the active page only when pressed, using Chrome's temporary `activeTab` access; the extension has no persistent all-sites access.
 
-ChatGPT's DOM and deep-link behavior are not public APIs. The hovered-link shortcut supports normal document content and open Shadow DOM, but intentionally cannot inspect closed Shadow DOM or child frames. The extension leaves the tab open and refuses to submit when it cannot verify the expected prompt or required controls.
+ChatGPT's DOM and deep-link behavior are not public APIs. The shortcut supports hovered links in normal document content and open Shadow DOM, but intentionally cannot inspect closed Shadow DOM or child frames. The extension leaves the tab open and refuses to submit when it cannot verify the expected prompt or required controls.

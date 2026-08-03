@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { getHoveredLinkUrl } from "../src/hovered-link";
+import { getShortcutTargetUrl } from "../src/hovered-link";
 import {
   buildChatGPTUrl,
   buildPrompt,
@@ -107,7 +107,7 @@ test("the hovered-link command has a customizable cross-platform default", () =>
   };
 
   assert.deepEqual(manifest.commands?.["send-hovered-link-to-chatgpt"], {
-    description: "Send the hovered link to ChatGPT",
+    description: "Send a hovered link or the current page to ChatGPT",
     suggested_key: {
       default: "Ctrl+B",
       mac: "Command+B"
@@ -135,7 +135,7 @@ test("the shortcut reads the resolved URL of the hovered link", () => {
   });
 
   try {
-    assert.equal(getHoveredLinkUrl(), "https://example.com/inner");
+    assert.equal(getShortcutTargetUrl(), "https://example.com/inner");
   } finally {
     Object.defineProperty(globalThis, "document", {
       configurable: true,
@@ -170,7 +170,7 @@ test("the shortcut reads a hovered link inside an open shadow root", () => {
 
   try {
     assert.equal(
-      getHoveredLinkUrl(),
+      getShortcutTargetUrl(),
       "https://www.reddit.com/r/example/comments/post/comment/id/"
     );
   } finally {
@@ -181,11 +181,12 @@ test("the shortcut reads a hovered link inside an open shadow root", () => {
   }
 });
 
-test("the shortcut fails closed when no link is hovered", () => {
+test("the shortcut uses the current page URL when no link is hovered", () => {
   const originalDocument = globalThis.document;
   Object.defineProperty(globalThis, "document", {
     configurable: true,
     value: {
+      location: { href: pageUrl },
       querySelectorAll() {
         return [];
       }
@@ -193,7 +194,7 @@ test("the shortcut fails closed when no link is hovered", () => {
   });
 
   try {
-    assert.equal(getHoveredLinkUrl(), null);
+    assert.equal(getShortcutTargetUrl(), pageUrl);
   } finally {
     Object.defineProperty(globalThis, "document", {
       configurable: true,

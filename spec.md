@@ -32,9 +32,9 @@ https://chatgpt.com/?prompt=<encoded target URL>
 
 The **Send link to ChatGPT** menu item appears for links and follows the same workflow using `info.linkUrl` instead of the active page URL.
 
-### Hovered-link shortcut
+### Link-or-page shortcut
 
-While a link is hovered in the active page, `Command+B` on macOS or `Ctrl+B` on other platforms follows the link context-menu workflow using that link's resolved URL. The command queries only `a[href]:hover` in the main frame at invocation time, recursively follows open shadow roots on the hovered element path, chooses the deepest matching anchor, and otherwise fails closed without opening ChatGPT. It does not inspect closed shadow roots or child frames. Injection failures and the absence of a hovered link produce a local console error and a red `!` badge on the active tab.
+When invoked with `Command+B` on macOS or `Ctrl+B` on other platforms, the shortcut uses the resolved URL of a link hovered in the active page. If no link is hovered, it uses the current page URL instead. The command queries only `a[href]:hover` in the main frame at invocation time, recursively follows open shadow roots on the hovered element path, and chooses the deepest matching anchor before falling back to `document.location.href`. It does not inspect closed shadow roots or child frames. Injection failures produce a local console error and a red `!` badge on the active tab.
 
 The shortcut is a suggested default, not a setting stored by the extension. Users can customize or disable it through `chrome://extensions/shortcuts`.
 
@@ -82,7 +82,7 @@ The extension uses no framework. esbuild bundles the three browser entry points 
 }
 ```
 
-The content script is statically limited to `https://chatgpt.com/*` and runs at `document_start` so it can capture the temporary dispatch marker before the client-rendered application changes history. The `scripting` permission is used only when the hovered-link command is invoked; `activeTab` grants temporary access to inspect the active page without persistent all-sites host access.
+The content script is statically limited to `https://chatgpt.com/*` and runs at `document_start` so it can capture the temporary dispatch marker before the client-rendered application changes history. The `scripting` permission is used only when the link-or-page command is invoked; `activeTab` grants temporary access to inspect the active page without persistent all-sites host access.
 
 No all-sites permission, paid OpenAI API, ChatGPT `/backend-api/` access, or third-party telemetry is permitted.
 
@@ -199,7 +199,7 @@ On final failure:
 
 Handled conditions include:
 
-- A hovered-link shortcut invoked without a hovered link or on a page where Chrome forbids script injection.
+- A shortcut invoked on a page where Chrome forbids script injection.
 - Logged-out sessions.
 - Interstitials or challenges.
 - Missing composer.
@@ -230,8 +230,9 @@ Run the cases relevant to a change and report which cases were verified in the c
 - Confirm no Enter key or second click is needed and the ChatGPT tab remains open when auto-close is disabled.
 - Right-click a link, choose **Send link to ChatGPT**, and confirm the linked URL—not the current page URL—is submitted.
 - Hover over a link, press the configured shortcut, and confirm the linked URL—not the current page URL—is submitted.
-- Press the shortcut without hovering a link and on a Chrome-restricted page; confirm no ChatGPT tab opens and a red `!` badge or error appears.
-- Change the shortcut through `chrome://extensions/shortcuts`, reload the extension, and confirm the new shortcut triggers the same hovered-link workflow.
+- Press the shortcut without hovering a link and confirm the current page URL is submitted.
+- Press the shortcut on a Chrome-restricted page and confirm no ChatGPT tab opens and a red `!` badge or error appears.
+- Change the shortcut through `chrome://extensions/shortcuts`, reload the extension, and confirm the new shortcut triggers the same link-or-page workflow.
 - Save prepend text in **Options**, send a page, and verify `text + space + URL`.
 - Save append text, send a link, and verify `URL + space + text`.
 - Trigger two dispatches close together and verify each target tab submits its own prompt once.

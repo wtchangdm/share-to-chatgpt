@@ -1,4 +1,4 @@
-export function getHoveredLinkUrl(): string | null {
+export function getShortcutTargetUrl(): string {
   function findInRoot(root: Document | ShadowRoot): string | null {
     const hoveredLinks = root.querySelectorAll<HTMLAnchorElement>("a[href]:hover");
     const link = hoveredLinks[hoveredLinks.length - 1];
@@ -13,5 +13,5 @@ export function getHoveredLinkUrl(): string | null {
     return hoveredUrl;
   }
 
-  return findInRoot(document);
+  return findInRoot(document) ?? document.location.href;
 }

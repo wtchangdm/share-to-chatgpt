@@ -20,7 +20,7 @@
   },
   "commands": {
     "send-hovered-link-to-chatgpt": {
-      "description": "Send the hovered link to ChatGPT",
+      "description": "Send a hovered link or the current page to ChatGPT",
       "suggested_key": {
         "default": "Ctrl+B",
         "mac": "Command+B"
