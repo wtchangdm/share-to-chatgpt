@@ -16,6 +16,11 @@ type MessageListener = (
 test("the background dispatch lifecycle binds, advances, and consumes state", async () => {
   const session = new Map<string, unknown>();
   const createdTabs: chrome.tabs.CreateProperties[] = [];
+  const updatedTabs: Array<{
+    tabId: number;
+    properties: chrome.tabs.UpdateProperties;
+    dispatchAtNavigation: DispatchPayload | undefined;
+  }> = [];
   const badgeUpdates: chrome.action.BadgeTextDetails[] = [];
   let actionClickListener: ActionClickListener | undefined;
   let messageListener: MessageListener | undefined;
@@ -69,6 +74,17 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
         createdTabs.push(properties);
         return { id: nextTabId++ } as chrome.tabs.Tab;
       },
+      async update(
+        tabId: number,
+        properties: chrome.tabs.UpdateProperties
+      ): Promise<chrome.tabs.Tab> {
+        updatedTabs.push({
+          tabId,
+          properties,
+          dispatchAtNavigation: dispatchEntries(session)[0]
+        });
+        return { id: tabId } as chrome.tabs.Tab;
+      },
       async remove(): Promise<void> {},
       onRemoved: { addListener(): void {} }
     },
@@ -109,12 +125,16 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
       id: 10,
       url: "https://example.com/article"
     } as chrome.tabs.Tab);
-    await waitUntil(() =>
-      createdTabs.length === 1 && dispatchEntries(session)[0]?.targetTabId === 20
-    );
+    await waitUntil(() => updatedTabs.length === 1);
 
-    assert.equal(createdTabs[0]?.active, false);
-    assert.match(createdTabs[0]?.url as string, /^https:\/\/chatgpt\.com\/\?prompt=/);
+    assert.deepEqual(createdTabs[0], { url: "about:blank", active: false });
+    assert.equal(updatedTabs[0]?.tabId, 20);
+    assert.match(
+      updatedTabs[0]?.properties.url as string,
+      /^https:\/\/chatgpt\.com\/\?prompt=/
+    );
+    assert.equal(updatedTabs[0]?.dispatchAtNavigation?.targetTabId, 20);
+    assert.equal(updatedTabs[0]?.dispatchAtNavigation?.status, "pending");
 
     const pending = dispatchEntries(session)[0];
     assert.ok(pending);

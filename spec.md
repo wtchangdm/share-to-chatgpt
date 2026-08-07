@@ -22,7 +22,7 @@ https://chatgpt.com/?prompt=<encoded target URL>
 
 1. Read the active tab URL and title.
 2. Construct the prompt from the URL and saved settings.
-3. Open ChatGPT with `chrome.tabs.create({ url, active: false })`.
+3. Create an inactive `about:blank` tab, bind its tab ID to the dispatch, and then navigate it to ChatGPT.
 4. Keep the original tab active.
 5. Verify or inject the prompt in the ChatGPT composer.
 6. Submit when automatic submission is enabled.
@@ -94,19 +94,20 @@ No all-sites permission, paid OpenAI API, ChatGPT `/backend-api/` access, or thi
 
 1. The service worker reads the target URL and local settings.
 2. It generates a random UUID and stores a `pending` dispatch in `chrome.storage.session` before navigation. The payload retains only the generated prompt, tab IDs, timestamps, transition status, and applicable automation flags; it does not duplicate the target URL or retain the source title.
-3. The ChatGPT deep link contains the existing `prompt` query and a temporary hash marker:
+3. It creates an inactive `about:blank` tab, persists the target tab binding and tab index, and only then navigates that tab to ChatGPT. This ordering prevents the content script from claiming a dispatch before its target binding is stored.
+4. The ChatGPT deep link contains the existing `prompt` query and a temporary hash marker:
 
    ```text
    #share-to-chatgpt-dispatch=<UUID>
    ```
 
-4. The content script does nothing in ChatGPT tabs without this marker.
-5. For a marked tab, it removes the hash with `history.replaceState` and claims the matching session payload through extension messaging.
-6. The service worker binds the dispatch to the sender's tab ID and changes its state to `claimed`.
-7. The content script verifies the expected prompt or injects it and verifies the resulting composer state.
-8. If `autoSubmit` is disabled, the dispatch completes in the `claimed` state and the tab remains open.
-9. If `autoSubmit` is enabled, the content script requests the `claimed → submitting` transition before invoking submission.
-10. A successful or final failed dispatch removes its session payload and tab index. Closing the target tab also removes its state.
+5. The content script does nothing in ChatGPT tabs without this marker.
+6. For a marked tab, it removes the hash with `history.replaceState` and claims the matching session payload through extension messaging.
+7. The service worker verifies the sender's bound tab ID and changes the dispatch state to `claimed`.
+8. The content script verifies the expected prompt or injects it and verifies the resulting composer state.
+9. If `autoSubmit` is disabled, the dispatch completes in the `claimed` state and the tab remains open.
+10. If `autoSubmit` is enabled, the content script requests the `claimed → submitting` transition before invoking submission.
+11. A successful or final failed dispatch removes its session payload and tab index. Closing the target tab also removes its state.
 
 A dispatch can be claimed and armed only once. The state transition before submission favors a missed submission over a duplicated submission if execution is interrupted at the boundary.
 

@@ -147,7 +147,7 @@ async function createDispatch(
   try {
     const url = buildChatGPTUrl(prompt, dispatch.id);
     const createdTab = await chrome.tabs.create({
-      url,
+      url: "about:blank",
       active: false
     });
 
@@ -155,15 +155,13 @@ async function createDispatch(
       throw new Error("Chrome did not return an ID for the new ChatGPT tab.");
     }
 
-    const latest = await getDispatch(dispatch.id);
-    if (latest) {
-      latest.targetTabId = createdTab.id;
-      await Promise.all([
-        saveDispatch(latest),
-        chrome.storage.session.set({ [tabKey(createdTab.id)]: dispatch.id })
-      ]);
-      scheduleExpiration(latest);
-    }
+    dispatch.targetTabId = createdTab.id;
+    await Promise.all([
+      saveDispatch(dispatch),
+      chrome.storage.session.set({ [tabKey(createdTab.id)]: dispatch.id })
+    ]);
+    scheduleExpiration(dispatch);
+    await chrome.tabs.update(createdTab.id, { url });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await failDispatch(dispatch, `Could not open ChatGPT: ${message}`);
