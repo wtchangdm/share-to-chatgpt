@@ -55,7 +55,7 @@ A blank optional-text value produces the exact bookmarklet prompt. Non-empty opt
 
 ```text
 src/
-  background.ts       Service worker, commands, context menu, dispatch state, badges, tab lifecycle
+  background.ts       Service worker, commands, context menu, dispatch state, status, tab lifecycle
   content.ts          ChatGPT readiness, prompt verification/injection, submission
   diagnostics.ts      Data-safe failure titles for the extension action
   dispatch-policy.ts  Pure one-way dispatch transition policy
@@ -110,6 +110,8 @@ No all-sites permission, paid OpenAI API, ChatGPT `/backend-api/` access, or thi
 11. A successful or final failed dispatch removes its session payload and tab index. Closing the target tab also removes its state.
 
 A dispatch can be claimed and armed only once. The state transition before submission favors a missed submission over a duplicated submission if execution is interrupted at the boundary.
+
+The source tab's extension action shows a blue `…` while its latest dispatch is active. Completion changes this to a green `✓` for approximately two seconds, with an action title that distinguishes a submitted prompt from a prefilled prompt. These status updates contain no URL or prompt data. A delayed result from an older dispatch cannot overwrite the source status owned by a newer dispatch. Source status is also cleared when that tab navigates; timer-based clearing is best-effort because a Manifest V3 service worker may stop.
 
 ## Readiness and time bounds
 
@@ -200,7 +202,7 @@ On final failure:
 
 - Keep the ChatGPT tab open.
 - Log a clear local console error.
-- Show a red `!` badge on the source and target tabs when they still exist.
+- Show a red `!` badge on the target tab and on the source tab when that dispatch still owns the source's latest status.
 - Set a concise per-tab extension-action title describing the failure category without including a URL, prompt, or underlying error detail.
 - Remove consumed dispatch state.
 - Do not retry submission.

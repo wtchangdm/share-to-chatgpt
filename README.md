@@ -17,6 +17,7 @@ javascript:(()=>{window.open(`https://chatgpt.com/?prompt=${encodeURIComponent(l
 - Supports optional text before or after the URL.
 - Can prefill without submitting.
 - Can close the ChatGPT tab after ChatGPT starts responding.
+- Shows data-safe progress, success, and failure states on the extension action.
 - Uses the existing signed-in `chatgpt.com` session—no OpenAI API key or paid API.
 
 ## Build and install
@@ -69,4 +70,4 @@ Generated scripts are written to `dist/`; do not edit them directly.
 
 Settings and dispatch state stay in local Chrome extension storage. Browsing data and prompts are not sent to third-party services; the only external action is normal navigation to `chatgpt.com`. The shortcut inspects the active page only when pressed, using Chrome's temporary `activeTab` access; the extension has no persistent all-sites access.
 
-ChatGPT's DOM and deep-link behavior are not public APIs. The shortcut supports hovered links in normal document content and open Shadow DOM, but intentionally cannot inspect closed Shadow DOM or child frames. The extension leaves the tab open and refuses to submit when it cannot verify the expected prompt or required controls. A failed dispatch shows a red `!`; hover the extension action for a data-safe failure category, with technical details kept in the local extension console.
+ChatGPT's DOM and deep-link behavior are not public APIs. The shortcut supports hovered links in normal document content and open Shadow DOM, but intentionally cannot inspect closed Shadow DOM or child frames. The extension leaves the tab open and refuses to submit when it cannot verify the expected prompt or required controls. The source tab shows a blue `…` while a dispatch is active and a brief green `✓` after completion. A failed dispatch shows a red `!`; hover the extension action for a data-safe failure category, with technical details kept in the local extension console. Status belongs to the latest dispatch from a source tab and is reset on navigation.

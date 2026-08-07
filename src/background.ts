@@ -21,7 +21,13 @@ import type {
 const CONTEXT_MENU_ID = "send-link-to-chatgpt";
 const SETTINGS_KEY = "settings";
 const TAB_PREFIX = "tab-dispatch:";
+const SOURCE_STATUS_PREFIX = "source-status:";
 const DISPATCH_TIMEOUT_MS = 15_000;
+const SUCCESS_BADGE_MS = 2_000;
+const PROGRESS_ACTION_TITLE = "Share to ChatGPT: dispatch in progress";
+const SUBMITTED_ACTION_TITLE = "Share to ChatGPT: prompt submitted";
+const PREFILLED_ACTION_TITLE = "Share to ChatGPT: prompt ready in ChatGPT";
+const sourceStatusQueues = new Map<number, Promise<void>>();
 
 function dispatchKey(dispatchId: string): string {
   return `${DISPATCH_STORAGE_PREFIX}${dispatchId}`;
@@ -29,6 +35,10 @@ function dispatchKey(dispatchId: string): string {
 
 function tabKey(tabId: number): string {
   return `${TAB_PREFIX}${tabId}`;
+}
+
+function sourceStatusKey(tabId: number): string {
+  return `${SOURCE_STATUS_PREFIX}${tabId}`;
 }
 
 async function getDispatch(dispatchId: string): Promise<DispatchPayload | undefined> {
@@ -41,13 +51,17 @@ async function saveDispatch(dispatch: DispatchPayload): Promise<void> {
   await chrome.storage.session.set({ [dispatchKey(dispatch.id)]: dispatch });
 }
 
-async function setBadge(tabId: number | undefined, text: string): Promise<void> {
+async function setBadge(
+  tabId: number | undefined,
+  text: string,
+  color = "#C62828"
+): Promise<void> {
   if (tabId === undefined) {
     return;
   }
 
   try {
-    await chrome.action.setBadgeBackgroundColor({ tabId, color: "#C62828" });
+    await chrome.action.setBadgeBackgroundColor({ tabId, color });
     await chrome.action.setBadgeText({ tabId, text });
   } catch {
     // The source or target tab may have closed.
@@ -83,6 +97,109 @@ async function setFailureDiagnostic(
   ]);
 }
 
+function queueSourceStatus(tabId: number, update: () => Promise<void>): Promise<void> {
+  const previous = sourceStatusQueues.get(tabId) ?? Promise.resolve();
+  const next = previous
+    .catch(() => undefined)
+    .then(update)
+    .catch((error: unknown) => {
+      console.error("[Share to ChatGPT] Could not update source-tab status:", error);
+    });
+  sourceStatusQueues.set(tabId, next);
+  return next.finally(() => {
+    if (sourceStatusQueues.get(tabId) === next) {
+      sourceStatusQueues.delete(tabId);
+    }
+  });
+}
+
+async function sourceOwnsStatus(dispatch: DispatchPayload): Promise<boolean> {
+  if (dispatch.sourceTabId === undefined) {
+    return false;
+  }
+  const key = sourceStatusKey(dispatch.sourceTabId);
+  const result = await chrome.storage.session.get(key);
+  return result[key] === dispatch.id;
+}
+
+async function startSourceStatus(dispatch: DispatchPayload): Promise<void> {
+  if (dispatch.sourceTabId === undefined) {
+    return;
+  }
+  const tabId = dispatch.sourceTabId;
+  await queueSourceStatus(tabId, async () => {
+    await chrome.storage.session.set({ [sourceStatusKey(tabId)]: dispatch.id });
+    await Promise.all([
+      setBadge(tabId, "…", "#1565C0"),
+      setActionTitle(tabId, PROGRESS_ACTION_TITLE)
+    ]);
+  });
+}
+
+async function setSourceFailureStatus(
+  dispatch: DispatchPayload,
+  error: string
+): Promise<void> {
+  if (dispatch.sourceTabId === undefined) {
+    return;
+  }
+  await queueSourceStatus(dispatch.sourceTabId, async () => {
+    if (await sourceOwnsStatus(dispatch)) {
+      await setFailureDiagnostic(dispatch.sourceTabId, error);
+    }
+  });
+}
+
+async function clearSourceStatus(dispatch: DispatchPayload): Promise<void> {
+  if (dispatch.sourceTabId === undefined) {
+    return;
+  }
+  const tabId = dispatch.sourceTabId;
+  await queueSourceStatus(tabId, async () => {
+    if (!await sourceOwnsStatus(dispatch)) {
+      return;
+    }
+    await chrome.storage.session.remove(sourceStatusKey(tabId));
+    await clearTabDiagnostic(tabId);
+  });
+}
+
+async function setSourceSuccessStatus(
+  dispatch: DispatchPayload,
+  submitted: boolean
+): Promise<void> {
+  if (dispatch.sourceTabId === undefined) {
+    return;
+  }
+  await queueSourceStatus(dispatch.sourceTabId, async () => {
+    if (!await sourceOwnsStatus(dispatch)) {
+      return;
+    }
+    await Promise.all([
+      setBadge(dispatch.sourceTabId, "✓", "#2E7D32"),
+      setActionTitle(
+        dispatch.sourceTabId,
+        submitted ? SUBMITTED_ACTION_TITLE : PREFILLED_ACTION_TITLE
+      )
+    ]);
+    setTimeout(() => {
+      void clearSourceStatus(dispatch);
+    }, SUCCESS_BADGE_MS);
+  });
+}
+
+async function clearSourceStatusOnNavigation(tabId: number): Promise<void> {
+  await queueSourceStatus(tabId, async () => {
+    const key = sourceStatusKey(tabId);
+    const result = await chrome.storage.session.get(key);
+    if (typeof result[key] !== "string") {
+      return;
+    }
+    await chrome.storage.session.remove(key);
+    await clearTabDiagnostic(tabId);
+  });
+}
+
 async function clearDispatch(dispatch: DispatchPayload): Promise<void> {
   const keys = [dispatchKey(dispatch.id)];
   if (dispatch.targetTabId !== undefined) {
@@ -96,7 +213,7 @@ async function failDispatch(dispatch: DispatchPayload, error: string): Promise<v
     dispatchId: dispatch.id
   });
   await Promise.all([
-    setFailureDiagnostic(dispatch.sourceTabId, error),
+    setSourceFailureStatus(dispatch, error),
     setFailureDiagnostic(dispatch.targetTabId, error)
   ]);
   await clearDispatch(dispatch);
@@ -126,7 +243,6 @@ async function createDispatch(
   sourceTabId?: number
 ): Promise<void> {
   await cleanExpiredDispatches();
-  await clearTabDiagnostic(sourceTabId);
 
   const settings = await readSettings();
   const prompt = buildPrompt(targetUrl, settings);
@@ -143,6 +259,7 @@ async function createDispatch(
   };
 
   await saveDispatch(dispatch);
+  await startSourceStatus(dispatch);
 
   try {
     const url = buildChatGPTUrl(prompt, dispatch.id);
@@ -284,7 +401,10 @@ async function handleContentMessage(
 
     const submitted = dispatch.status === "submitting";
     const shouldCloseTab = submitted && dispatch.autoClose && message.closeTab;
-    await clearDispatch(dispatch);
+    await Promise.all([
+      setSourceSuccessStatus(dispatch, submitted),
+      clearDispatch(dispatch)
+    ]);
     if (shouldCloseTab) {
       setTimeout(() => {
         void chrome.tabs.remove(sender.tab.id).catch((error: unknown) => {
@@ -338,6 +458,12 @@ chrome.commands.onCommand.addListener((command, tab) => {
   }
 });
 
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.status === "loading") {
+    void clearSourceStatusOnNavigation(tabId);
+  }
+});
+
 chrome.tabs.onRemoved.addListener((tabId) => {
   void (async () => {
     const key = tabKey(tabId);
@@ -351,6 +477,8 @@ chrome.tabs.onRemoved.addListener((tabId) => {
         await chrome.storage.session.remove(key);
       }
     }
+    await chrome.storage.session.remove(sourceStatusKey(tabId));
+    sourceStatusQueues.delete(tabId);
   })();
 });
 

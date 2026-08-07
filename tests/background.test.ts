@@ -12,6 +12,11 @@ type MessageListener = (
   sender: chrome.runtime.MessageSender,
   sendResponse: (response: DispatchResponse) => void
 ) => boolean | undefined;
+type TabUpdatedListener = (
+  tabId: number,
+  changeInfo: chrome.tabs.TabChangeInfo,
+  tab: chrome.tabs.Tab
+) => void;
 
 test("the background dispatch lifecycle binds, advances, and consumes state", async () => {
   const session = new Map<string, unknown>();
@@ -22,8 +27,11 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
     dispatchAtNavigation: DispatchPayload | undefined;
   }> = [];
   const badgeUpdates: chrome.action.BadgeTextDetails[] = [];
+  const titleUpdates: chrome.action.TitleDetails[] = [];
+  const scheduledTimers: Array<{ callback: () => void; delay?: number }> = [];
   let actionClickListener: ActionClickListener | undefined;
   let messageListener: MessageListener | undefined;
+  let tabUpdatedListener: TabUpdatedListener | undefined;
   let nextTabId = 20;
 
   const storageArea = {
@@ -67,7 +75,9 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
       async setBadgeText(details: chrome.action.BadgeTextDetails): Promise<void> {
         badgeUpdates.push(details);
       },
-      async setTitle(): Promise<void> {}
+      async setTitle(details: chrome.action.TitleDetails): Promise<void> {
+        titleUpdates.push(details);
+      }
     },
     tabs: {
       async create(properties: chrome.tabs.CreateProperties): Promise<chrome.tabs.Tab> {
@@ -86,6 +96,11 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
         return { id: tabId } as chrome.tabs.Tab;
       },
       async remove(): Promise<void> {},
+      onUpdated: {
+        addListener(listener: TabUpdatedListener): void {
+          tabUpdatedListener = listener;
+        }
+      },
       onRemoved: { addListener(): void {} }
     },
     scripting: { async executeScript(): Promise<never[]> { return []; } },
@@ -113,13 +128,17 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
   });
   Object.defineProperty(globalThis, "setTimeout", {
     configurable: true,
-    value: () => 0
+    value: (callback: () => void, delay?: number) => {
+      scheduledTimers.push({ callback, delay });
+      return 0;
+    }
   });
 
   try {
     await import("../src/background");
     assert.ok(actionClickListener);
     assert.ok(messageListener);
+    assert.ok(tabUpdatedListener);
 
     actionClickListener({
       id: 10,
@@ -141,6 +160,11 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
     assert.equal(pending.status, "pending");
     assert.equal(pending.sourceTabId, 10);
     assert.equal(pending.targetTabId, 20);
+    assert.equal(lastBadgeText(badgeUpdates, 10), "…");
+    assert.equal(
+      lastActionTitle(titleUpdates, 10),
+      "Share to ChatGPT: dispatch in progress"
+    );
 
     const wrongTabClaim = await sendContentMessage(
       messageListener,
@@ -187,7 +211,54 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
     ), { ok: true });
     assert.equal(dispatchEntries(session).length, 0);
     assert.equal(session.has("tab-dispatch:20"), false);
-    assert.ok(badgeUpdates.some((update) => update.tabId === 10 && update.text === ""));
+    assert.equal(lastBadgeText(badgeUpdates, 10), "✓");
+    assert.equal(
+      lastActionTitle(titleUpdates, 10),
+      "Share to ChatGPT: prompt submitted"
+    );
+
+    const successClear = scheduledTimers.find((timer) => timer.delay === 2_000);
+    assert.ok(successClear);
+    successClear.callback();
+    await waitUntil(() => lastBadgeText(badgeUpdates, 10) === "");
+    assert.equal(lastActionTitle(titleUpdates, 10), "Send this page to ChatGPT");
+
+    actionClickListener({ id: 30, url: "https://example.com/first" } as chrome.tabs.Tab);
+    actionClickListener({ id: 30, url: "https://example.com/second" } as chrome.tabs.Tab);
+    await waitUntil(() => updatedTabs.length === 3 && dispatchEntries(session).length === 2);
+
+    const olderDispatch = dispatchEntries(session).find((entry) => entry.targetTabId === 21);
+    const latestDispatch = dispatchEntries(session).find((entry) => entry.targetTabId === 22);
+    assert.ok(olderDispatch);
+    assert.ok(latestDispatch);
+    assert.equal(lastBadgeText(badgeUpdates, 30), "…");
+
+    assert.deepEqual(await sendContentMessage(
+      messageListener,
+      {
+        type: "fail-dispatch",
+        dispatchId: olderDispatch.id,
+        error: "Older dispatch failed."
+      },
+      21
+    ), { ok: true });
+    assert.equal(lastBadgeText(badgeUpdates, 30), "…");
+    assert.equal(lastBadgeText(badgeUpdates, 21), "!");
+
+    assert.deepEqual(await sendContentMessage(
+      messageListener,
+      {
+        type: "fail-dispatch",
+        dispatchId: latestDispatch.id,
+        error: "Latest dispatch failed."
+      },
+      22
+    ), { ok: true });
+    assert.equal(lastBadgeText(badgeUpdates, 30), "!");
+
+    tabUpdatedListener(30, { status: "loading" }, { id: 30 } as chrome.tabs.Tab);
+    await waitUntil(() => lastBadgeText(badgeUpdates, 30) === "");
+    assert.equal(lastActionTitle(titleUpdates, 30), "Send this page to ChatGPT");
   } finally {
     Object.defineProperty(globalThis, "chrome", {
       configurable: true,
@@ -199,6 +270,20 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
     });
   }
 });
+
+function lastBadgeText(
+  updates: chrome.action.BadgeTextDetails[],
+  tabId: number
+): string | undefined {
+  return updates.filter((update) => update.tabId === tabId).at(-1)?.text;
+}
+
+function lastActionTitle(
+  updates: chrome.action.TitleDetails[],
+  tabId: number
+): string | undefined {
+  return updates.filter((update) => update.tabId === tabId).at(-1)?.title;
+}
 
 function dispatchEntries(session: Map<string, unknown>): DispatchPayload[] {
   return Array.from(session.entries())
