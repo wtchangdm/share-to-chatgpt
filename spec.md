@@ -88,7 +88,7 @@ The extension uses no framework. esbuild bundles the three browser entry points 
 
 The content script is statically limited to `https://chatgpt.com/*` and runs at `document_start` so it can capture the temporary dispatch marker before the client-rendered application changes history. The `scripting` permission is used only when the link-or-page command is invoked; `activeTab` grants temporary access to inspect the active page without persistent all-sites host access.
 
-No all-sites permission, paid OpenAI API, ChatGPT `/backend-api/` access, or third-party telemetry is permitted.
+No all-sites permission, paid OpenAI API, ChatGPT `/backend-api/` access, or third-party telemetry is permitted. The manifest declares Chrome 120 as the minimum supported version, matching the production build target.
 
 ## Prompt and dispatch flow
 

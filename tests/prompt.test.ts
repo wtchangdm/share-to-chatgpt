@@ -102,9 +102,11 @@ test("automatic closing uses the scoped assistant-message marker", () => {
 
 test("the manifest requests only the required extension permissions", () => {
   const manifest = JSON.parse(readFileSync("manifest.json", "utf8")) as {
+    minimum_chrome_version?: string;
     permissions?: string[];
   };
 
+  assert.equal(manifest.minimum_chrome_version, "120");
   assert.deepEqual(manifest.permissions, [
     "activeTab",
     "contextMenus",

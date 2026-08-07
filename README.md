@@ -22,7 +22,7 @@ javascript:(()=>{window.open(`https://chatgpt.com/?prompt=${encodeURIComponent(l
 
 ## Build and install
 
-Requirements: a current Node.js LTS release and npm.
+Requirements: Chrome 120 or newer, a current Node.js LTS release, and npm.
 
 ```sh
 npm install
