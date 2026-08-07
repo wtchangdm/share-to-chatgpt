@@ -20,7 +20,7 @@ https://chatgpt.com/?prompt=<encoded target URL>
 
 ### Toolbar button
 
-1. Read the active tab URL and title.
+1. Read the active tab URL.
 2. Construct the prompt from the URL and saved settings.
 3. Create an inactive `about:blank` tab, bind its tab ID to the dispatch, and then navigate it to ChatGPT.
 4. Keep the original tab active.
@@ -222,11 +222,11 @@ A missing assistant-message marker after a confirmed submission is nonfatal: the
 
 ## Security and privacy
 
-- Prompts, settings, and dispatch state remain in local extension storage and memory. Dispatch payloads do not separately retain source titles or duplicate target URLs.
+- Before navigation, prompts, settings, and dispatch state are held only in local extension storage and memory. Dispatch payloads do not separately retain source titles or duplicate target URLs.
 - The temporary dispatch hash contains only a random UUID and is removed immediately.
 - The prompt remains in the `?prompt=` query because that is the bookmarklet's source-of-truth prefill mechanism.
 - Runtime messages are accepted only from `https://chatgpt.com/` tabs and are bound to the expected target tab ID.
-- No browsing data or ChatGPT content is sent to third-party servers.
+- The constructed prompt is sent only to `chatgpt.com` through normal page navigation. No browsing data, prompt, or ChatGPT content is sent to any other service.
 - Assistant message content is checked only for non-emptiness and is never stored.
 
 ## Manual regression checklist

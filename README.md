@@ -68,6 +68,6 @@ Generated scripts are written to `dist/`; do not edit them directly.
 
 ## Privacy and compatibility
 
-Settings and dispatch state stay in local Chrome extension storage. Browsing data and prompts are not sent to third-party services; the only external action is normal navigation to `chatgpt.com`. The shortcut inspects the active page only when pressed, using Chrome's temporary `activeTab` access; the extension has no persistent all-sites access.
+Settings and dispatch state stay in local Chrome extension storage. The constructed prompt—including the page or link URL—is sent only to `chatgpt.com` through normal page navigation and is not sent to any other service. The shortcut inspects the active page only when pressed, using Chrome's temporary `activeTab` access; the extension has no persistent all-sites access.
 
 ChatGPT's DOM and deep-link behavior are not public APIs. The shortcut supports hovered links in normal document content and open Shadow DOM, but intentionally cannot inspect closed Shadow DOM or child frames. The extension leaves the tab open and refuses to submit when it cannot verify the expected prompt or required controls. The source tab shows a blue `…` while a dispatch is active and a brief green `✓` after completion. A failed dispatch shows a red `!`; hover the extension action for a data-safe failure category, with technical details kept in the local extension console. Status belongs to the latest dispatch from a source tab and is reset on navigation.
