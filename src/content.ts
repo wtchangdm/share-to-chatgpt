@@ -7,6 +7,7 @@ import {
   readComposerText,
   type ComposerElement
 } from "./selectors";
+import { isSubmissionConfirmed } from "./submission";
 import type { ContentMessage, DispatchPayload, DispatchResponse } from "./types";
 
 const MARKER_PREFIX = "#share-to-chatgpt-dispatch=";
@@ -247,11 +248,18 @@ async function runDispatch(dispatchId: string): Promise<void> {
 
     const submitted = await waitFor(() => {
       const currentComposer = findComposer();
-      if (!currentComposer || !composerHasPrompt(currentComposer, claimedDispatch.prompt)) {
-        return true;
+      if (!currentComposer) {
+        return null;
       }
       const currentButton = findSendButton(currentComposer);
-      return currentButton && !isSendButtonEnabled(currentButton) ? true : null;
+      return isSubmissionConfirmed({
+        composerPresent: true,
+        composerHasExpectedPrompt: composerHasPrompt(
+          currentComposer,
+          claimedDispatch.prompt
+        ),
+        sendButtonEnabled: currentButton ? isSendButtonEnabled(currentButton) : null
+      }) ? true : null;
     }, Math.min(deadline, Date.now() + SUBMISSION_CONFIRM_TIMEOUT_MS));
 
     if (!submitted) {

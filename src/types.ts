@@ -12,8 +12,6 @@ export type DispatchStatus = "pending" | "claimed" | "submitting";
 export interface DispatchPayload {
   id: string;
   prompt: string;
-  sourceUrl: string;
-  sourceTitle: string;
   sourceTabId?: number;
   targetTabId?: number;
   createdAt: number;

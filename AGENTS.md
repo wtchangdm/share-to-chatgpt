@@ -44,9 +44,14 @@ Documentation-only, comment-only, formatting-only, and generated-artifact change
 
 - `src/background.ts`: service worker, context menu, dispatch state, badges, and tab lifecycle.
 - `src/content.ts`: ChatGPT readiness, prompt verification/injection, submission, and auto-close detection.
-- `src/options.ts`: local settings UI.
+- `src/diagnostics.ts`: data-safe failure titles for the extension action.
+- `src/dispatch-policy.ts`: pure one-way dispatch transition policy.
+- `src/hovered-link.ts`: invocation-time hovered-link lookup.
+- `src/options-model.ts`: settings persistence behavior and options UI state.
+- `src/options.ts`: local settings UI bindings.
 - `src/prompt.ts`: settings normalization and prompt/deep-link construction.
 - `src/selectors.ts`: isolated ChatGPT DOM selectors.
+- `src/submission.ts`: pure submission-confirmation policy.
 - `src/types.ts`: settings, dispatch, and message types.
 - `tests/`: automated tests. Ensure the test runner includes every added test entry point.
 - `scripts/`: build and test runners.

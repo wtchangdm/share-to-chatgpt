@@ -55,13 +55,17 @@ A blank optional-text value produces the exact bookmarklet prompt. Non-empty opt
 
 ```text
 src/
-  background.ts    Service worker, commands, context menu, dispatch state, badges, tab lifecycle
-  content.ts       ChatGPT readiness, prompt verification/injection, submission
-  hovered-link.ts  Invocation-time hovered-link lookup for the active page
-  options.ts       Local settings UI
-  prompt.ts        Settings normalization and prompt/deep-link construction
-  selectors.ts     Isolated ChatGPT DOM selectors
-  types.ts         Settings, dispatch, and message types
+  background.ts       Service worker, commands, context menu, dispatch state, badges, tab lifecycle
+  content.ts          ChatGPT readiness, prompt verification/injection, submission
+  diagnostics.ts      Data-safe failure titles for the extension action
+  dispatch-policy.ts  Pure one-way dispatch transition policy
+  hovered-link.ts     Invocation-time hovered-link lookup for the active page
+  options-model.ts    Settings load/save behavior and UI state
+  options.ts          Local settings UI bindings
+  prompt.ts           Settings normalization and prompt/deep-link construction
+  selectors.ts        Isolated ChatGPT DOM selectors
+  submission.ts       Pure submission-confirmation policy
+  types.ts            Settings, dispatch, and message types
 ```
 
 The extension uses no framework. esbuild bundles the three browser entry points into `dist/`.
@@ -88,8 +92,8 @@ No all-sites permission, paid OpenAI API, ChatGPT `/backend-api/` access, or thi
 
 ## Prompt and dispatch flow
 
-1. The service worker reads the target URL, source title, and local settings.
-2. It generates a random UUID and stores a `pending` dispatch in `chrome.storage.session` before navigation.
+1. The service worker reads the target URL and local settings.
+2. It generates a random UUID and stores a `pending` dispatch in `chrome.storage.session` before navigation. The payload retains only the generated prompt, tab IDs, timestamps, transition status, and applicable automation flags; it does not duplicate the target URL or retain the source title.
 3. The ChatGPT deep link contains the existing `prompt` query and a temporary hash marker:
 
    ```text
@@ -110,7 +114,9 @@ A dispatch can be claimed and armed only once. The state transition before submi
 
 ChatGPT is treated as a client-rendered application. Readiness uses `MutationObserver` plus bounded 250 ms fallback polling; it does not rely on a fixed page-load sleep.
 
-The dispatch expires approximately 15 seconds after creation. Current bounded phases are:
+The dispatch expires approximately 15 seconds after creation. Expiration is checked on every dispatch message, at service-worker startup, and opportunistically before a new dispatch. Service-worker timers provide prompt cleanup while the worker remains active; correctness does not depend on exact timer delivery.
+
+Current bounded phases are:
 
 - Deep-link prefill grace: up to 4 seconds.
 - Prompt injection verification: up to 3 seconds.
@@ -181,7 +187,7 @@ form.requestSubmit(button);
 
 `button.click()` is used only when the form is unavailable or `requestSubmit` throws. No synthetic keyboard event is used.
 
-Submission is confirmed when the composer no longer contains the expected prompt or its Send button becomes disabled.
+Submission is confirmed when the composer remains observable and either no longer contains the expected prompt or its Send button becomes disabled. A temporarily missing composer is treated as uncertainty and does not confirm submission.
 
 When `autoClose` is enabled, the content script records the number of non-empty assistant messages before submitting and waits for that count to increase. It then asks the service worker to close the target tab with `chrome.tabs.remove`. If no assistant message starts before the bounded timeout, the submitted tab remains open.
 
@@ -194,6 +200,7 @@ On final failure:
 - Keep the ChatGPT tab open.
 - Log a clear local console error.
 - Show a red `!` badge on the source and target tabs when they still exist.
+- Set a concise per-tab extension-action title describing the failure category without including a URL, prompt, or underlying error detail.
 - Remove consumed dispatch state.
 - Do not retry submission.
 
@@ -212,7 +219,7 @@ A missing assistant-message marker after a confirmed submission is nonfatal: the
 
 ## Security and privacy
 
-- Prompts, URLs, settings, and dispatch state remain in local extension storage and memory.
+- Prompts, settings, and dispatch state remain in local extension storage and memory. Dispatch payloads do not separately retain source titles or duplicate target URLs.
 - The temporary dispatch hash contains only a random UUID and is removed immediately.
 - The prompt remains in the `?prompt=` query because that is the bookmarklet's source-of-truth prefill mechanism.
 - Runtime messages are accepted only from `https://chatgpt.com/` tabs and are bound to the expected target tab ID.
@@ -231,7 +238,7 @@ Run the cases relevant to a change and report which cases were verified in the c
 - Right-click a link, choose **Send link to ChatGPT**, and confirm the linked URL—not the current page URL—is submitted.
 - Hover over a link, press the configured shortcut, and confirm the linked URL—not the current page URL—is submitted.
 - Press the shortcut without hovering a link and confirm the current page URL is submitted.
-- Press the shortcut on a Chrome-restricted page and confirm no ChatGPT tab opens and a red `!` badge or error appears.
+- Press the shortcut on a Chrome-restricted page and confirm no ChatGPT tab opens, a red `!` badge appears, and hovering the extension action reports that the shortcut is unavailable on that page.
 - Change the shortcut through `chrome://extensions/shortcuts`, reload the extension, and confirm the new shortcut triggers the same link-or-page workflow.
 - Save prepend text in **Options**, send a page, and verify `text + space + URL`.
 - Save append text, send a link, and verify `URL + space + text`.

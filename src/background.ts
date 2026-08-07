@@ -1,3 +1,14 @@
+import {
+  armDispatch,
+  canCompleteDispatch,
+  claimDispatch,
+  DISPATCH_STORAGE_PREFIX,
+  findExpiredDispatches
+} from "./dispatch-policy";
+import {
+  DEFAULT_ACTION_TITLE,
+  getFailureActionTitle
+} from "./diagnostics";
 import { getShortcutTargetUrl } from "./hovered-link";
 import { buildChatGPTUrl, buildPrompt, normalizeSettings } from "./prompt";
 import type {
@@ -9,12 +20,11 @@ import type {
 
 const CONTEXT_MENU_ID = "send-link-to-chatgpt";
 const SETTINGS_KEY = "settings";
-const DISPATCH_PREFIX = "dispatch:";
 const TAB_PREFIX = "tab-dispatch:";
 const DISPATCH_TIMEOUT_MS = 15_000;
 
 function dispatchKey(dispatchId: string): string {
-  return `${DISPATCH_PREFIX}${dispatchId}`;
+  return `${DISPATCH_STORAGE_PREFIX}${dispatchId}`;
 }
 
 function tabKey(tabId: number): string {
@@ -44,6 +54,35 @@ async function setBadge(tabId: number | undefined, text: string): Promise<void> 
   }
 }
 
+async function setActionTitle(tabId: number | undefined, title: string): Promise<void> {
+  if (tabId === undefined) {
+    return;
+  }
+
+  try {
+    await chrome.action.setTitle({ tabId, title });
+  } catch {
+    // The source or target tab may have closed.
+  }
+}
+
+async function clearTabDiagnostic(tabId: number | undefined): Promise<void> {
+  await Promise.all([
+    setBadge(tabId, ""),
+    setActionTitle(tabId, DEFAULT_ACTION_TITLE)
+  ]);
+}
+
+async function setFailureDiagnostic(
+  tabId: number | undefined,
+  error: string
+): Promise<void> {
+  await Promise.all([
+    setBadge(tabId, "!"),
+    setActionTitle(tabId, getFailureActionTitle(error))
+  ]);
+}
+
 async function clearDispatch(dispatch: DispatchPayload): Promise<void> {
   const keys = [dispatchKey(dispatch.id)];
   if (dispatch.targetTabId !== undefined) {
@@ -57,8 +96,8 @@ async function failDispatch(dispatch: DispatchPayload, error: string): Promise<v
     dispatchId: dispatch.id
   });
   await Promise.all([
-    setBadge(dispatch.sourceTabId, "!"),
-    setBadge(dispatch.targetTabId, "!")
+    setFailureDiagnostic(dispatch.sourceTabId, error),
+    setFailureDiagnostic(dispatch.targetTabId, error)
   ]);
   await clearDispatch(dispatch);
 }
@@ -83,20 +122,18 @@ async function readSettings(): Promise<Settings> {
 }
 
 async function createDispatch(
-  sourceUrl: string,
-  sourceTitle: string,
+  targetUrl: string,
   sourceTabId?: number
 ): Promise<void> {
-  await setBadge(sourceTabId, "");
+  await cleanExpiredDispatches();
+  await clearTabDiagnostic(sourceTabId);
 
   const settings = await readSettings();
-  const prompt = buildPrompt(sourceUrl, settings);
+  const prompt = buildPrompt(targetUrl, settings);
   const now = Date.now();
   const dispatch: DispatchPayload = {
     id: crypto.randomUUID(),
     prompt,
-    sourceUrl,
-    sourceTitle,
     sourceTabId,
     createdAt: now,
     expiresAt: now + DISPATCH_TIMEOUT_MS,
@@ -139,7 +176,8 @@ async function shareShortcutTarget(tab: chrome.tabs.Tab): Promise<void> {
     return;
   }
 
-  await setBadge(tab.id, "");
+  await cleanExpiredDispatches();
+  await clearTabDiagnostic(tab.id);
 
   try {
     const results = await chrome.scripting.executeScript({
@@ -151,11 +189,12 @@ async function shareShortcutTarget(tab: chrome.tabs.Tab): Promise<void> {
       throw new Error("The shortcut target URL is unavailable.");
     }
 
-    await createDispatch(targetUrl, tab.title ?? "", tab.id);
+    await createDispatch(targetUrl, tab.id);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    console.error(`[Share to ChatGPT] Could not send the shortcut target: ${detail}`);
-    await setBadge(tab.id, "!");
+    const message = `Could not send the shortcut target: ${detail}`;
+    console.error(`[Share to ChatGPT] ${message}`);
+    await setFailureDiagnostic(tab.id, message);
   }
 }
 
@@ -218,36 +257,34 @@ async function handleContentMessage(
   if (dispatch.targetTabId !== undefined && dispatch.targetTabId !== sender.tab.id) {
     return { ok: false, error: "Dispatch belongs to a different tab." };
   }
-  dispatch.targetTabId = sender.tab.id;
 
   if (message.type === "claim-dispatch") {
-    if (dispatch.status !== "pending") {
-      return { ok: false, error: "Dispatch was already claimed." };
+    const claimed = claimDispatch(dispatch, sender.tab.id);
+    if (!claimed.ok) {
+      return claimed;
     }
-    dispatch.status = "claimed";
     await Promise.all([
-      saveDispatch(dispatch),
+      saveDispatch(claimed.dispatch),
       chrome.storage.session.set({ [tabKey(sender.tab.id)]: dispatch.id })
     ]);
-    return { ok: true, dispatch };
+    return { ok: true, dispatch: claimed.dispatch };
   }
 
   if (message.type === "arm-dispatch") {
-    if (dispatch.status !== "claimed") {
-      return { ok: false, error: "Dispatch is not ready to submit." };
+    const armed = armDispatch(dispatch, sender.tab.id);
+    if (!armed.ok) {
+      return armed;
     }
-    dispatch.status = "submitting";
-    await saveDispatch(dispatch);
+    await saveDispatch(armed.dispatch);
     return { ok: true };
   }
 
   if (message.type === "complete-dispatch") {
-    const submitted = dispatch.status === "submitting";
-    const prefilledOnly = dispatch.status === "claimed" && !dispatch.autoSubmit;
-    if (!submitted && !prefilledOnly) {
+    if (!canCompleteDispatch(dispatch)) {
       return { ok: false, error: "Dispatch did not reach its expected completion state." };
     }
 
+    const submitted = dispatch.status === "submitting";
     const shouldCloseTab = submitted && dispatch.autoClose && message.closeTab;
     await clearDispatch(dispatch);
     if (shouldCloseTab) {
@@ -266,16 +303,11 @@ async function handleContentMessage(
 
 async function cleanExpiredDispatches(): Promise<void> {
   const entries = await chrome.storage.session.get(null);
-  const expired = Object.entries(entries)
-    .filter(([key, value]) => key.startsWith(DISPATCH_PREFIX) &&
-      typeof value === "object" && value !== null &&
-      "expiresAt" in value && typeof value.expiresAt === "number" &&
-      value.expiresAt <= Date.now())
-    .map(([, value]) => value as DispatchPayload);
+  const expired = findExpiredDispatches(entries, Date.now());
 
   await Promise.all(expired.map((dispatch) => failDispatch(
     dispatch,
-    "Removed an expired dispatch after the service worker restarted."
+    "Removed an expired dispatch during cleanup."
   )));
 }
 
@@ -285,12 +317,13 @@ chrome.runtime.onInstalled.addListener(() => {
 
 chrome.action.onClicked.addListener((tab) => {
   if (!tab.url) {
-    void setBadge(tab.id, "!");
-    console.error("[Share to ChatGPT] The active tab URL is unavailable.");
+    const error = "The active tab URL is unavailable.";
+    void setFailureDiagnostic(tab.id, error);
+    console.error(`[Share to ChatGPT] ${error}`);
     return;
   }
 
-  void createDispatch(tab.url, tab.title ?? "", tab.id);
+  void createDispatch(tab.url, tab.id);
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
@@ -298,7 +331,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     return;
   }
 
-  void createDispatch(info.linkUrl, tab?.title ?? "", tab?.id);
+  void createDispatch(info.linkUrl, tab?.id);
 });
 
 chrome.commands.onCommand.addListener((command, tab) => {

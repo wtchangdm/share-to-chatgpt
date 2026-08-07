@@ -1,7 +1,20 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import {
+  armDispatch,
+  canCompleteDispatch,
+  claimDispatch,
+  findExpiredDispatches
+} from "../src/dispatch-policy";
+import { getFailureActionTitle } from "../src/diagnostics";
 import { getShortcutTargetUrl } from "../src/hovered-link";
+import {
+  loadOptions,
+  saveOptions,
+  type OptionsFields,
+  type SettingsStorage
+} from "../src/options-model";
 import {
   buildChatGPTUrl,
   buildPrompt,
@@ -12,6 +25,8 @@ import {
   ASSISTANT_MESSAGE_SELECTOR,
   SEND_BUTTON_SELECTORS
 } from "../src/selectors";
+import { isSubmissionConfirmed } from "../src/submission";
+import type { DispatchPayload } from "../src/types";
 
 const pageUrl = "https://example.com/articles/one?x=1&y=two#section";
 
@@ -210,4 +225,154 @@ test("exact Send controls take priority over a generic submit button", () => {
     'button[aria-label="Send message"]',
     'button[type="submit"]'
   ]);
+});
+
+function pendingDispatch(overrides: Partial<DispatchPayload> = {}): DispatchPayload {
+  return {
+    id: "dispatch-123",
+    prompt: pageUrl,
+    sourceTabId: 10,
+    createdAt: 1_000,
+    expiresAt: 16_000,
+    status: "pending",
+    autoSubmit: true,
+    autoClose: false,
+    ...overrides
+  };
+}
+
+test("a dispatch can be claimed once only by its target tab", () => {
+  const firstClaim = claimDispatch(pendingDispatch(), 20);
+  assert.equal(firstClaim.ok, true);
+  if (!firstClaim.ok) {
+    return;
+  }
+  assert.equal(firstClaim.dispatch.status, "claimed");
+  assert.equal(firstClaim.dispatch.targetTabId, 20);
+
+  assert.deepEqual(claimDispatch(firstClaim.dispatch, 20), {
+    ok: false,
+    error: "Dispatch was already claimed."
+  });
+  assert.deepEqual(claimDispatch(pendingDispatch({ targetTabId: 21 }), 20), {
+    ok: false,
+    error: "Dispatch belongs to a different tab."
+  });
+});
+
+test("expired dispatch cleanup ignores live dispatches and tab indexes", () => {
+  const expired = pendingDispatch({ id: "expired", expiresAt: 2_000 });
+  const live = pendingDispatch({ id: "live", expiresAt: 4_000 });
+  assert.deepEqual(findExpiredDispatches({
+    "dispatch:expired": expired,
+    "dispatch:live": live,
+    "tab-dispatch:20": "expired"
+  }, 3_000), [expired]);
+});
+
+test("dispatch submission follows the one-way state machine", () => {
+  assert.deepEqual(armDispatch(pendingDispatch(), 20), {
+    ok: false,
+    error: "Dispatch is not ready to submit."
+  });
+
+  const claimed = pendingDispatch({ status: "claimed", targetTabId: 20 });
+  const armed = armDispatch(claimed, 20);
+  assert.equal(armed.ok, true);
+  if (!armed.ok) {
+    return;
+  }
+  assert.equal(armed.dispatch.status, "submitting");
+  assert.equal(canCompleteDispatch(armed.dispatch), true);
+  assert.equal(canCompleteDispatch(claimed), false);
+  assert.equal(
+    canCompleteDispatch(pendingDispatch({ status: "claimed", autoSubmit: false })),
+    true
+  );
+});
+
+test("a temporarily missing composer does not confirm submission", () => {
+  assert.equal(isSubmissionConfirmed({ composerPresent: false }), false);
+  assert.equal(isSubmissionConfirmed({
+    composerPresent: true,
+    composerHasExpectedPrompt: false,
+    sendButtonEnabled: true
+  }), true);
+  assert.equal(isSubmissionConfirmed({
+    composerPresent: true,
+    composerHasExpectedPrompt: true,
+    sendButtonEnabled: false
+  }), true);
+});
+
+test("failure action titles are useful without exposing dispatch data", () => {
+  const error = `Prompt injection failed for ${pageUrl}`;
+  const title = getFailureActionTitle(error);
+  assert.equal(title, "Share to ChatGPT: prompt verification failed");
+  assert.equal(title.includes(pageUrl), false);
+  assert.equal(
+    getFailureActionTitle("Cannot access contents of the page"),
+    "Share to ChatGPT: shortcut unavailable on this page"
+  );
+});
+
+function optionsFields(): OptionsFields {
+  return {
+    optionalText: { value: "Summarize" },
+    placement: { value: "append" },
+    autoSubmit: { checked: true },
+    autoClose: { checked: false, disabled: false },
+    status: { textContent: "" }
+  };
+}
+
+test("options storage failures are shown without exposing error details", async () => {
+  const fields = optionsFields();
+  fields.autoSubmit.checked = false;
+  const storage: SettingsStorage = {
+    async get() {
+      throw new Error(`private detail: ${pageUrl}`);
+    },
+    async set() {
+      throw new Error(`private detail: ${pageUrl}`);
+    }
+  };
+  const reported: string[] = [];
+  const reportError = (message: string): void => {
+    reported.push(message);
+  };
+
+  assert.equal(await loadOptions(fields, storage, reportError), false);
+  const loadStatus: string = fields.status.textContent;
+  assert.equal(loadStatus, "Could not load settings.");
+  assert.equal(loadStatus.includes(pageUrl), false);
+  assert.equal(fields.autoClose.disabled, true);
+
+  assert.equal(await saveOptions(fields, storage, () => 0, reportError), false);
+  const saveStatus: string = fields.status.textContent;
+  assert.equal(saveStatus, "Could not save settings.");
+  assert.equal(saveStatus.includes(pageUrl), false);
+  assert.deepEqual(reported, [
+    "[Share to ChatGPT] Could not load settings.",
+    "[Share to ChatGPT] Could not save settings."
+  ]);
+});
+
+test("the manifest provides extension and toolbar icons", () => {
+  const manifest = JSON.parse(readFileSync("manifest.json", "utf8")) as {
+    icons?: Record<string, string>;
+    action?: { default_icon?: Record<string, string> };
+  };
+  const expected = {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  };
+
+  assert.deepEqual(manifest.icons, expected);
+  assert.deepEqual(manifest.action?.default_icon, expected);
+  for (const path of Object.values(expected)) {
+    assert.equal(readFileSync(path).subarray(1, 4).toString(), "PNG");
+  }
 });
