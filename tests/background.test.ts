@@ -17,6 +17,10 @@ type TabUpdatedListener = (
   changeInfo: chrome.tabs.TabChangeInfo,
   tab: chrome.tabs.Tab
 ) => void;
+type TabRemovedListener = (
+  tabId: number,
+  removeInfo: chrome.tabs.TabRemoveInfo
+) => void;
 
 test("the background dispatch lifecycle binds, advances, and consumes state", async () => {
   const session = new Map<string, unknown>();
@@ -29,9 +33,11 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
   const badgeUpdates: chrome.action.BadgeTextDetails[] = [];
   const titleUpdates: chrome.action.TitleDetails[] = [];
   const scheduledTimers: Array<{ callback: () => void; delay?: number }> = [];
+  const removedStorageKeys: string[] = [];
   let actionClickListener: ActionClickListener | undefined;
   let messageListener: MessageListener | undefined;
   let tabUpdatedListener: TabUpdatedListener | undefined;
+  let tabRemovedListener: TabRemovedListener | undefined;
   let localSettings: Record<string, unknown> | undefined;
   let nextTabId = 20;
 
@@ -52,6 +58,7 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
     },
     async remove(keys: string | string[]): Promise<void> {
       for (const key of typeof keys === "string" ? [keys] : keys) {
+        removedStorageKeys.push(key);
         session.delete(key);
       }
     }
@@ -102,7 +109,11 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
           tabUpdatedListener = listener;
         }
       },
-      onRemoved: { addListener(): void {} }
+      onRemoved: {
+        addListener(listener: TabRemovedListener): void {
+          tabRemovedListener = listener;
+        }
+      }
     },
     scripting: { async executeScript(): Promise<never[]> { return []; } },
     contextMenus: {
@@ -140,6 +151,7 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
     assert.ok(actionClickListener);
     assert.ok(messageListener);
     assert.ok(tabUpdatedListener);
+    assert.ok(tabRemovedListener);
 
     actionClickListener({
       id: 10,
@@ -271,6 +283,27 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
     actionClickListener({ id: 40, url: unchangedUrl } as chrome.tabs.Tab);
     await waitUntil(() => updatedTabs.length === 4);
     assert.equal(updatedTabs[3]?.dispatchAtNavigation?.prompt, unchangedUrl);
+
+    actionClickListener({ id: 50, url: "https://example.com/closed-target" } as chrome.tabs.Tab);
+    await waitUntil(() => updatedTabs.length === 5);
+    const closedTargetDispatch = dispatchEntries(session).find(
+      (entry) => entry.sourceTabId === 50
+    );
+    assert.ok(closedTargetDispatch?.targetTabId);
+    assert.equal(lastBadgeText(badgeUpdates, 50), "…");
+
+    tabRemovedListener(closedTargetDispatch.targetTabId, {
+      isWindowClosing: false,
+      windowId: 1
+    });
+    await waitUntil(() =>
+      !session.has(`dispatch:${closedTargetDispatch.id}`) &&
+      !session.has("source-status:50") &&
+      lastBadgeText(badgeUpdates, 50) === "" &&
+      removedStorageKeys.includes(`source-status:${closedTargetDispatch.targetTabId}`)
+    );
+    await Promise.resolve();
+    assert.equal(lastActionTitle(titleUpdates, 50), "Send this page to ChatGPT");
   } finally {
     Object.defineProperty(globalThis, "chrome", {
       configurable: true,

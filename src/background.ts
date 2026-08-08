@@ -472,7 +472,10 @@ chrome.tabs.onRemoved.addListener((tabId) => {
     if (typeof dispatchId === "string") {
       const dispatch = await getDispatch(dispatchId);
       if (dispatch) {
-        await clearDispatch(dispatch);
+        await Promise.all([
+          clearSourceStatus(dispatch),
+          clearDispatch(dispatch)
+        ]);
       } else {
         await chrome.storage.session.remove(key);
       }
