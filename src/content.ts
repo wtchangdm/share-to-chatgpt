@@ -288,13 +288,16 @@ export async function runDispatch(dispatchId: string): Promise<void> {
         if (responseStopButton) {
           responseWasStreaming = true;
         }
-        if (countStartedAssistantMessages() <= assistantMessageCount) {
-          return null;
-        }
-        if (isPersistedConversationPath(location.pathname)) {
+        const assistantResponseStarted =
+          countStartedAssistantMessages() > assistantMessageCount;
+        if (isPersistedConversationPath(location.pathname) &&
+          (responseStopButton || assistantResponseStarted)) {
           return true;
         }
-        return responseWasStreaming && !responseStopButton ? true : null;
+        return responseWasStreaming && !responseStopButton &&
+          assistantResponseStarted
+          ? true
+          : null;
       }, autoCloseDeadline - 500);
       closeTab = responseCompleted === true;
       if (!closeTab) {

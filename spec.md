@@ -26,7 +26,7 @@ https://chatgpt.com/?prompt=<encoded cleaned target URL>
 4. Keep the original tab active.
 5. Verify or inject the prompt in the ChatGPT composer.
 6. Submit when automatic submission is enabled.
-7. Optionally close the ChatGPT tab after a new non-empty assistant message appears and the temporary `/c/WEB:<UUID>` path changes to a canonical `/c/<UUID>` conversation path. If no canonical path is observed, completed streaming is the fail-safe fallback.
+7. Optionally close the ChatGPT tab after the temporary `/c/WEB:<UUID>` path changes to a canonical `/c/<UUID>` conversation path and either the form-scoped Stop button or a new non-empty assistant message indicates that a response started. If no canonical path is observed, completed streaming is the fail-safe fallback.
 
 ### Link context menu
 
@@ -188,7 +188,7 @@ button[data-testid="stop-button"] /* restricted to the composer's form */
 /c/<UUID>
 ```
 
-A higher count of non-empty assistant-message markers establishes that a new response started. The observed ChatGPT flow first uses `/c/WEB:<UUID>` and then replaces it with canonical `/c/<UUID>` after assigning the conversation. Auto-close accepts only a UUID-shaped canonical path; unrelated and temporary paths fail closed. Once both the canonical path and new assistant message exist, the tab may close while the Stop button is still present. If the canonical path is not observed, an observed Stop-button present-to-absent transition plus the new assistant message provides the slower response-completion fallback. The extension does not inspect or store the assistant response text.
+Either a form-scoped Stop button or a higher count of non-empty assistant-message markers establishes that a new response started. The observed ChatGPT flow first uses `/c/WEB:<UUID>` and then replaces it with canonical `/c/<UUID>` after assigning the conversation. Auto-close accepts only a UUID-shaped canonical path; unrelated and temporary paths fail closed. Once both the canonical path and either response-start marker exist, the tab may close immediately while the Stop button is still present and before assistant text appears. If the canonical path is not observed, an observed Stop-button present-to-absent transition plus a new assistant message provides the slower response-completion fallback. The extension does not inspect or store the assistant response text.
 
 ## Prompt insertion
 
@@ -222,7 +222,7 @@ form.requestSubmit(button);
 
 Submission is confirmed when the composer remains observable and either no longer contains the expected prompt or its Send button becomes disabled. A temporarily missing composer is treated as uncertainty and does not confirm submission.
 
-When `autoClose` is enabled, the content script records the number of non-empty assistant messages before submitting, checks for a canonical UUID conversation path, and observes the composer's form for the exact `button[data-testid="stop-button"]` streaming control. It asks the service worker to close the target tab with `chrome.tabs.remove` as soon as both a canonical path and a new non-empty assistant message exist; it does not wait for the full response. If no canonical path is observed, it closes only after the Stop button has been observed and then disappears and the assistant-message count increases. If neither condition can be verified before the bounded timeout, the submitted tab remains open.
+When `autoClose` is enabled, the content script records the number of non-empty assistant messages before submitting, checks for a canonical UUID conversation path, and observes the composer's form for the exact `button[data-testid="stop-button"]` streaming control. It asks the service worker to close the target tab with `chrome.tabs.remove` as soon as a canonical path exists together with either the Stop button or an increased assistant-message count; it does not wait for assistant text or the full response when the Stop button is available. If no canonical path is observed, it closes only after the Stop button has been observed and then disappears and the assistant-message count increases. If neither condition can be verified before the bounded timeout, the submitted tab remains open.
 
 ## Failure behavior
 
@@ -248,7 +248,7 @@ Handled conditions include:
 - Changed ChatGPT selectors.
 - Closely timed multiple dispatches.
 
-A missing assistant-message marker or unverified auto-close condition after a confirmed submission is nonfatal: the extension logs a console error, consumes the completed dispatch, and leaves the tab open. It does not show a failure badge for a message that was already submitted.
+A missing response-start marker or unverified auto-close condition after a confirmed submission is nonfatal: the extension logs a console error, consumes the completed dispatch, and leaves the tab open. It does not show a failure badge for a message that was already submitted.
 
 ## Security and privacy
 
@@ -281,7 +281,7 @@ Run the cases relevant to a change and report which cases were verified in the c
 - Log out of ChatGPT or block the composer, dispatch again, and confirm no prompt is submitted, the tab remains open, and a red `!` badge or error appears.
 - Open an unrelated ChatGPT tab and confirm it does not auto-submit anything.
 - Disable automatic submission and confirm the correct prompt is prefilled but not submitted.
-- Enable automatic closing and confirm the background tab remains open on `/c/WEB:<UUID>`, then closes after a canonical `/c/<UUID>` path and a new non-empty assistant message appear, without waiting for the full response.
+- Enable automatic closing and confirm the background tab remains open on `/c/WEB:<UUID>`, then closes after a canonical `/c/<UUID>` path appears while the form-scoped Stop button is present, without waiting for assistant text or the full response.
 - Reload the extension and confirm automation settings retain their saved values.
 
 ## Inherently fragile behavior

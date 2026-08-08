@@ -285,7 +285,7 @@ test("an incomplete assistant response leaves the submitted tab open", async () 
   }
 });
 
-test("a verified prompt closes after its canonical conversation URL is assigned", async () => {
+test("a canonical conversation closes as soon as the response starts", async () => {
   const dom = installDom();
   const messages: string[] = [];
   const closeRequests: boolean[] = [];
@@ -300,7 +300,6 @@ test("a verified prompt closes after its canonical conversation URL is assigned"
     dom.button.disabled = true;
     dom.form.sendButtonAvailable = false;
     dom.form.stopButtonAvailable = true;
-    dom.assistantMessages.push({ textContent: "Response started" });
     setTimeout(() => {
       dom.setPathname("/c/6a76e003-92b8-83e8-90ef-22ce9ea8e8a3");
     }, 10);
