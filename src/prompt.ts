@@ -3,16 +3,104 @@ import type { Settings } from "./types";
 export const DEFAULT_SETTINGS: Settings = {
   optionalText: "",
   placement: "prepend",
+  stripTrackingParameters: true,
   autoSubmit: true,
   autoClose: false
 };
 
 const CHATGPT_BASE_URL = "https://chatgpt.com/";
 
+const TRACKING_QUERY_PARAMETERS = [
+  "utm_id",
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_source_platform",
+  "utm_term",
+  "utm_content",
+  "utm_creative_format",
+  "utm_marketing_tactic",
+  "gclid",
+  "dclid",
+  "gbraid",
+  "wbraid",
+  "gad_source",
+  "gad_campaignid",
+  "srsltid",
+  "fbclid",
+  "msclkid",
+  "ttclid",
+  "li_fat_id",
+  "mc_cid",
+  "mc_eid",
+  "mc_tc"
+] as const;
+
+const TRACKING_QUERY_PARAMETER_SET: ReadonlySet<string> =
+  new Set(TRACKING_QUERY_PARAMETERS);
+
+function decodeQueryParameterName(value: string): string {
+  if (!value.includes("%") && !value.includes("+")) {
+    return value;
+  }
+
+  try {
+    return decodeURIComponent(value.replace(/\+/g, " "));
+  } catch {
+    return value;
+  }
+}
+
+export function stripCommonTrackingParameters(value: string): string {
+  const queryStart = value.indexOf("?");
+  if (queryStart === -1) {
+    return value;
+  }
+
+  const fragmentStart = value.indexOf("#");
+  if (fragmentStart !== -1 && fragmentStart < queryStart) {
+    return value;
+  }
+
+  const queryEnd = fragmentStart === -1 ? value.length : fragmentStart;
+  const retainedFields: string[] = [];
+  let changed = false;
+
+  for (const field of value.slice(queryStart + 1, queryEnd).split("&")) {
+    const equalsIndex = field.indexOf("=");
+    const encodedName = equalsIndex === -1 ? field : field.slice(0, equalsIndex);
+    const name = decodeQueryParameterName(encodedName);
+    if (TRACKING_QUERY_PARAMETER_SET.has(name)) {
+      changed = true;
+    } else {
+      retainedFields.push(field);
+    }
+  }
+
+  if (!changed) {
+    return value;
+  }
+
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(value);
+  } catch {
+    return value;
+  }
+  if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+    return value;
+  }
+
+  const hasRetainedField = retainedFields.some((field) => field.length > 0);
+  const retainedQuery = hasRetainedField ? `?${retainedFields.join("&")}` : "";
+  return value.slice(0, queryStart) + retainedQuery + value.slice(queryEnd);
+}
+
 export function normalizeSettings(value: Partial<Settings> | undefined): Settings {
   return {
     optionalText: typeof value?.optionalText === "string" ? value.optionalText : "",
     placement: value?.placement === "append" ? "append" : "prepend",
+    stripTrackingParameters: value?.stripTrackingParameters !== false,
     autoSubmit: value?.autoSubmit !== false,
     autoClose: value?.autoClose === true
   };
@@ -20,18 +108,22 @@ export function normalizeSettings(value: Partial<Settings> | undefined): Setting
 
 export function buildPrompt(
   url: string,
-  settings: Pick<Settings, "optionalText" | "placement">
+  settings: Pick<Settings, "optionalText" | "placement"> &
+    Partial<Pick<Settings, "stripTrackingParameters">>
 ): string {
+  const targetUrl = settings.stripTrackingParameters === false
+    ? url
+    : stripCommonTrackingParameters(url);
   const optionalText = settings.optionalText
     .trim()
     .replace(/\s*[\r\n]+\s*/g, " ");
   if (!optionalText) {
-    return url;
+    return targetUrl;
   }
 
   return settings.placement === "append"
-    ? `${url} ${optionalText}`
-    : `${optionalText} ${url}`;
+    ? `${targetUrl} ${optionalText}`
+    : `${optionalText} ${targetUrl}`;
 }
 
 export function buildChatGPTUrl(prompt: string, dispatchId?: string): string {

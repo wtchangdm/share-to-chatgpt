@@ -6,6 +6,7 @@ const SETTINGS_KEY = "settings";
 export interface OptionsFields {
   optionalText: { value: string };
   placement: { value: string };
+  stripTrackingParameters: { checked: boolean };
   autoSubmit: { checked: boolean };
   autoClose: { checked: boolean; disabled: boolean };
   status: { textContent: string };
@@ -38,6 +39,7 @@ export async function loadOptions(
 
     fields.optionalText.value = settings.optionalText;
     fields.placement.value = settings.placement;
+    fields.stripTrackingParameters.checked = settings.stripTrackingParameters;
     fields.autoSubmit.checked = settings.autoSubmit;
     fields.autoClose.checked = settings.autoClose;
     syncAutoCloseAvailability(fields);
@@ -65,6 +67,7 @@ export async function saveOptions(
       [SETTINGS_KEY]: {
         optionalText: fields.optionalText.value,
         placement,
+        stripTrackingParameters: fields.stripTrackingParameters.checked,
         autoSubmit: fields.autoSubmit.checked,
         autoClose: fields.autoClose.checked
       } satisfies Settings

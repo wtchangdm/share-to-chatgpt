@@ -60,6 +60,12 @@ fieldset {
   opacity: 0.6;
 }
 
+.help {
+  color: GrayText;
+  font-size: 0.9em;
+  margin: 0 0 0 24px;
+}
+
 .actions {
   align-items: center;
   display: flex;

@@ -32,6 +32,7 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
   let actionClickListener: ActionClickListener | undefined;
   let messageListener: MessageListener | undefined;
   let tabUpdatedListener: TabUpdatedListener | undefined;
+  let localSettings: Record<string, unknown> | undefined;
   let nextTabId = 20;
 
   const storageArea = {
@@ -61,7 +62,7 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
       session: storageArea,
       local: {
         async get(): Promise<Record<string, unknown>> {
-          return {};
+          return localSettings ? { settings: localSettings } : {};
         }
       }
     },
@@ -142,7 +143,7 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
 
     actionClickListener({
       id: 10,
-      url: "https://example.com/article"
+      url: "https://example.com/article?utm_source=newsletter&item=42#details"
     } as chrome.tabs.Tab);
     await waitUntil(() => updatedTabs.length === 1);
 
@@ -154,6 +155,10 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
     );
     assert.equal(updatedTabs[0]?.dispatchAtNavigation?.targetTabId, 20);
     assert.equal(updatedTabs[0]?.dispatchAtNavigation?.status, "pending");
+    assert.equal(
+      updatedTabs[0]?.dispatchAtNavigation?.prompt,
+      "https://example.com/article?item=42#details"
+    );
 
     const pending = dispatchEntries(session)[0];
     assert.ok(pending);
@@ -259,6 +264,13 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
     tabUpdatedListener(30, { status: "loading" }, { id: 30 } as chrome.tabs.Tab);
     await waitUntil(() => lastBadgeText(badgeUpdates, 30) === "");
     assert.equal(lastActionTitle(titleUpdates, 30), "Send this page to ChatGPT");
+
+    localSettings = { stripTrackingParameters: false };
+    const unchangedUrl =
+      "https://example.com/article?utm_source=newsletter&item=42#details";
+    actionClickListener({ id: 40, url: unchangedUrl } as chrome.tabs.Tab);
+    await waitUntil(() => updatedTabs.length === 4);
+    assert.equal(updatedTabs[3]?.dispatchAtNavigation?.prompt, unchangedUrl);
   } finally {
     Object.defineProperty(globalThis, "chrome", {
       configurable: true,

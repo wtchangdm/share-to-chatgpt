@@ -8,6 +8,7 @@ import {
 interface BrowserOptionsFields extends OptionsFields {
   optionalText: HTMLTextAreaElement;
   placement: HTMLSelectElement;
+  stripTrackingParameters: HTMLInputElement;
   autoSubmit: HTMLInputElement;
   autoClose: HTMLInputElement;
   status: HTMLOutputElement;
@@ -25,6 +26,10 @@ function getOptionsFields(): BrowserOptionsFields {
   return {
     optionalText: getRequiredElement("#optional-text", HTMLTextAreaElement),
     placement: getRequiredElement("#placement", HTMLSelectElement),
+    stripTrackingParameters: getRequiredElement(
+      "#strip-tracking-parameters",
+      HTMLInputElement
+    ),
     autoSubmit: getRequiredElement("#auto-submit", HTMLInputElement),
     autoClose: getRequiredElement("#auto-close", HTMLInputElement),
     status: getRequiredElement("#status", HTMLOutputElement)

@@ -14,6 +14,7 @@ javascript:(()=>{window.open(`https://chatgpt.com/?prompt=${encodeURIComponent(l
 - Sends the active page URL from the toolbar button.
 - Adds **Send link to ChatGPT** to link context menus.
 - Sends a hovered link—or the current page when no link is hovered—with `Command+B` on macOS or `Ctrl+B` on other platforms.
+- Removes common campaign and click-tracking parameters while preserving other URL data.
 - Supports optional text before or after the URL.
 - Can prefill without submitting.
 - Can close the ChatGPT tab after ChatGPT starts responding.
@@ -46,13 +47,23 @@ Reload the extension from `chrome://extensions` after rebuilding it.
 - Right-click a link and select **Send link to ChatGPT** to send that link URL.
 - Press `Command+B` on macOS or `Ctrl+B` on other platforms to send the hovered link URL, or the current page URL when no link is hovered.
 - Customize or disable the shortcut at `chrome://extensions/shortcuts`.
-- Right-click the extension icon and select **Options** to configure prompt text and automation.
+- Right-click the extension icon and select **Options** to configure sharing and automation.
 
 | Option | Default | Behavior |
 | --- | --- | --- |
 | Optional text | Empty | Added before or after the URL. Line breaks are normalized to spaces. |
+| Remove common tracking parameters from shared URLs | On | Removes the known parameters listed below while preserving other query parameters and fragments. |
 | Automatically submit the prompt | On | Turn off to prefill the composer without submitting. |
 | Close the ChatGPT tab after ChatGPT starts responding | Off | Closes only after the first non-empty assistant message appears. Requires automatic submission. |
+
+With link cleanup enabled, the extension removes these exact, case-sensitive parameter names from HTTP and HTTPS URLs:
+
+- Google Analytics campaign tags: `utm_id`, `utm_source`, `utm_medium`, `utm_campaign`, `utm_source_platform`, `utm_term`, `utm_content`, `utm_creative_format`, and `utm_marketing_tactic`.
+- Google advertising identifiers: `gclid`, `dclid`, `gbraid`, `wbraid`, `gad_source`, `gad_campaignid`, and Merchant Center `srsltid`.
+- Other advertising click identifiers: Meta `fbclid`, Microsoft Advertising `msclkid`, TikTok `ttclid`, and LinkedIn `li_fat_id`.
+- Mailchimp campaign, recipient, and product-recommendation identifiers: `mc_cid`, `mc_eid`, and `mc_tc`.
+
+The conservative list, exact cleanup contract, and provider sources are documented in [spec.md](spec.md#tracking-parameter-cleanup). Signed or single-use links can cover the complete query string with an integrity check; turn cleanup off if removing a listed parameter makes a link unusable.
 
 ## Development
 
@@ -62,6 +73,12 @@ Run the full automated validation suite with:
 
 ```sh
 npm run check
+```
+
+Query-cleanup performance changes also require repeatable before/after measurement:
+
+```sh
+npm run benchmark:query-stripping
 ```
 
 Generated scripts are written to `dist/`; do not edit them directly.

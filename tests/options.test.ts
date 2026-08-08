@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   loadOptions,
@@ -11,11 +12,22 @@ function optionsFields(): OptionsFields {
   return {
     optionalText: { value: "" },
     placement: { value: "prepend" },
+    stripTrackingParameters: { checked: true },
     autoSubmit: { checked: true },
     autoClose: { checked: false, disabled: false },
     status: { textContent: "" }
   };
 }
+
+test("tracking cleanup help is associated with its checkbox", () => {
+  const html = readFileSync("options.html", "utf8");
+
+  assert.match(
+    html,
+    /id="strip-tracking-parameters"[^>]*aria-describedby="strip-tracking-help"/
+  );
+  assert.match(html, /id="strip-tracking-help"/);
+});
 
 test("options load, dependency state, and save stay synchronized", async () => {
   const fields = optionsFields();
@@ -26,6 +38,7 @@ test("options load, dependency state, and save stay synchronized", async () => {
         settings: {
           optionalText: "Review this",
           placement: "append",
+          stripTrackingParameters: false,
           autoSubmit: false,
           autoClose: true
         }
@@ -39,6 +52,7 @@ test("options load, dependency state, and save stay synchronized", async () => {
   assert.equal(await loadOptions(fields, storage), true);
   assert.equal(fields.optionalText.value, "Review this");
   assert.equal(fields.placement.value, "append");
+  assert.equal(fields.stripTrackingParameters.checked, false);
   assert.equal(fields.autoSubmit.checked, false);
   assert.equal(fields.autoClose.checked, true);
   assert.equal(fields.autoClose.disabled, true);
@@ -53,6 +67,7 @@ test("options load, dependency state, and save stay synchronized", async () => {
     settings: {
       optionalText: "Review this",
       placement: "append",
+      stripTrackingParameters: false,
       autoSubmit: true,
       autoClose: true
     }

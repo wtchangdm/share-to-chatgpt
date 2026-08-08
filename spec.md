@@ -4,16 +4,16 @@
 
 Replace the foreground-interrupting bookmarklet workflow with a local Chrome extension that opens ChatGPT in a background tab, safely prefills the expected prompt, and optionally submits and closes the tab.
 
-The source-of-truth bookmarklet is:
+The original bookmarklet workflow is:
 
 ```js
 javascript:(()=>{window.open(`https://chatgpt.com/?prompt=${encodeURIComponent(location.href)}`,"_blank","noopener,noreferrer")})()
 ```
 
-With default settings, the prompt is exactly the target URL and the ChatGPT deep link remains:
+With default settings, the prompt is the target URL after the conservative tracking-parameter cleanup defined below. A URL without a listed tracking parameter remains byte-for-byte unchanged, and the ChatGPT deep link remains:
 
 ```text
-https://chatgpt.com/?prompt=<encoded target URL>
+https://chatgpt.com/?prompt=<encoded cleaned target URL>
 ```
 
 ## Supported interactions
@@ -46,10 +46,35 @@ Settings are stored under `settings` in `chrome.storage.local`.
 | --- | --- | --- | --- |
 | `optionalText` | `string` | `""` | Text added to the target URL. |
 | `placement` | `"prepend" \| "append"` | `"prepend"` | Whether optional text appears before or after the URL. |
+| `stripTrackingParameters` | `boolean` | `true` | Whether known tracking parameters are removed before prompt construction. |
 | `autoSubmit` | `boolean` | `true` | Whether the verified prompt is submitted automatically. |
 | `autoClose` | `boolean` | `false` | Whether the target tab closes after ChatGPT starts responding. Effective only when `autoSubmit` is enabled. |
 
-A blank optional-text value produces the exact bookmarklet prompt. Non-empty optional text and the URL are separated by one space. Line breaks in optional text are normalized to spaces to avoid contenteditable paragraph mismatches.
+A blank optional-text value produces only the cleaned or original target URL. Non-empty optional text and the URL are separated by one space. Line breaks in optional text are normalized to spaces to avoid contenteditable paragraph mismatches.
+
+### Tracking-parameter cleanup
+
+Cleanup applies only to valid HTTP and HTTPS URLs and removes every occurrence of these exact, case-sensitive parameter names:
+
+- [Google Analytics][google-analytics]: `utm_id`, `utm_source`, `utm_medium`, `utm_campaign`, `utm_source_platform`, `utm_term`, `utm_content`, `utm_creative_format`, `utm_marketing_tactic`
+- Google advertising ([click IDs][google-click-ids], [iOS IDs][google-ios-ids], [`gad_*`][google-gad], [Merchant Center][google-merchant]): `gclid`, `dclid`, `gbraid`, `wbraid`, `gad_source`, `gad_campaignid`, `srsltid`
+- [Meta][meta-click-id], [Microsoft Advertising][microsoft-click-id], [TikTok][tiktok-click-id], and [LinkedIn][linkedin-click-id]: `fbclid`, `msclkid`, `ttclid`, `li_fat_id`
+- [Mailchimp][mailchimp-tracking]: `mc_cid`, `mc_eid`, `mc_tc`
+
+Cleanup scans the raw query once and parses the full URL only after finding a listed candidate, to validate its protocol. It reconstructs changed URLs from the original string, preserving the order and byte representation of retained parameters and the fragment. URLs without a listed parameter, invalid URLs, and non-HTTP(S) URLs are returned unchanged. Generic names such as `ref`, `source`, or `campaign` are not inferred to be tracking because they can control page functionality.
+
+Firefox and Brave document the same general technique of removing known tracking parameters ([Firefox Query Parameter Stripping](https://firefox-source-docs.mozilla.org/toolkit/components/antitracking/anti-tracking/query-stripping/index.html), [Brave privacy features](https://brave.com/privacy-features/)). Removing any parameter can still invalidate a signature or one-time token covering the complete query; users can disable cleanup, and the extension does not guess which URLs are signed.
+
+[google-analytics]: https://support.google.com/analytics/answer/10917952
+[google-click-ids]: https://support.google.com/analytics/answer/15612152
+[google-ios-ids]: https://support.google.com/google-ads/answer/10417364
+[google-gad]: https://support.google.com/google-ads/answer/16193746
+[google-merchant]: https://support.google.com/merchants/answer/15191080
+[meta-click-id]: https://developers.facebook.com/docs/marketing-api/conversions-api/parameters/fbp-and-fbc/
+[microsoft-click-id]: https://learn.microsoft.com/en-us/advertising/msa-help/hlp_ba_proc_microsoftclickid
+[tiktok-click-id]: https://ads.tiktok.com/help/article/tiktok-click-id?lang=en
+[linkedin-click-id]: https://www.linkedin.com/help/lms/answer/a5939261
+[mailchimp-tracking]: https://mailchimp.com/developer/marketing/docs/e-commerce/
 
 ## Architecture
 
@@ -92,7 +117,7 @@ No all-sites permission, paid OpenAI API, ChatGPT `/backend-api/` access, or thi
 
 ## Prompt and dispatch flow
 
-1. The service worker reads the target URL and local settings.
+1. The service worker reads the target URL and local settings, then applies enabled tracking-parameter cleanup before constructing the prompt.
 2. It generates a random UUID and stores a `pending` dispatch in `chrome.storage.session` before navigation. The payload retains only the generated prompt, tab IDs, timestamps, transition status, and applicable automation flags; it does not duplicate the target URL or retain the source title.
 3. It creates an inactive `about:blank` tab, persists the target tab binding and tab index, and only then navigates that tab to ChatGPT. This ordering prevents the content script from claiming a dispatch before its target binding is stored.
 4. The ChatGPT deep link contains the existing `prompt` query and a temporary hash marker:
@@ -224,7 +249,7 @@ A missing assistant-message marker after a confirmed submission is nonfatal: the
 
 - Before navigation, prompts, settings, and dispatch state are held only in local extension storage and memory. Dispatch payloads do not separately retain source titles or duplicate target URLs.
 - The temporary dispatch hash contains only a random UUID and is removed immediately.
-- The prompt remains in the `?prompt=` query because that is the bookmarklet's source-of-truth prefill mechanism.
+- The prompt remains in the `?prompt=` query because that is the existing deep-link prefill mechanism.
 - Runtime messages are accepted only from `https://chatgpt.com/` tabs and are bound to the expected target tab ID.
 - The constructed prompt is sent only to `chatgpt.com` through normal page navigation. No browsing data, prompt, or ChatGPT content is sent to any other service.
 - Assistant message content is checked only for non-emptiness and is never stored.
@@ -243,8 +268,10 @@ Run the cases relevant to a change and report which cases were verified in the c
 - Press the shortcut without hovering a link and confirm the current page URL is submitted.
 - Press the shortcut on a Chrome-restricted page and confirm no ChatGPT tab opens, a red `!` badge appears, and hovering the extension action reports that the shortcut is unavailable on that page.
 - Change the shortcut through `chrome://extensions/shortcuts`, reload the extension, and confirm the new shortcut triggers the same link-or-page workflow.
-- Save prepend text in **Options**, send a page, and verify `text + space + URL`.
-- Save append text, send a link, and verify `URL + space + text`.
+- With link cleanup enabled, send a URL containing `utm_source`, `fbclid`, and an unrelated query parameter; verify the listed tracking parameters are absent while the unrelated parameter and fragment remain.
+- Disable link cleanup, send the same URL, and verify it remains unchanged.
+- Save prepend text in **Options**, send a page, and verify `text + space + cleaned URL`.
+- Save append text, send a link, and verify `cleaned URL + space + text`.
 - Trigger two dispatches close together and verify each target tab submits its own prompt once.
 - Log out of ChatGPT or block the composer, dispatch again, and confirm no prompt is submitted, the tab remains open, and a red `!` badge or error appears.
 - Open an unrelated ChatGPT tab and confirm it does not auto-submit anything.

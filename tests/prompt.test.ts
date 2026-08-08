@@ -30,13 +30,125 @@ import type { DispatchPayload } from "../src/types";
 
 const pageUrl = "https://example.com/articles/one?x=1&y=two#section";
 
-test("the default prompt and deep link match the bookmarklet behavior", () => {
+test("the default prompt and deep link preserve non-tracking query parameters", () => {
   const prompt = buildPrompt(pageUrl, DEFAULT_SETTINGS);
 
   assert.equal(prompt, pageUrl);
   assert.equal(
     buildChatGPTUrl(prompt),
     `https://chatgpt.com/?prompt=${encodeURIComponent(pageUrl)}`
+  );
+});
+
+const trackingQueryParameters = [
+  "utm_id",
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_source_platform",
+  "utm_term",
+  "utm_content",
+  "utm_creative_format",
+  "utm_marketing_tactic",
+  "gclid",
+  "dclid",
+  "gbraid",
+  "wbraid",
+  "gad_source",
+  "gad_campaignid",
+  "srsltid",
+  "fbclid",
+  "msclkid",
+  "ttclid",
+  "li_fat_id",
+  "mc_cid",
+  "mc_eid",
+  "mc_tc"
+] as const;
+
+for (const parameter of trackingQueryParameters) {
+  test(`the default cleanup strips ${parameter}`, () => {
+    const trackedUrl =
+      `https://example.com/article?article=42&${parameter}=tracking#comments`;
+
+    assert.equal(
+      buildPrompt(trackedUrl, DEFAULT_SETTINGS),
+      "https://example.com/article?article=42#comments"
+    );
+  });
+}
+
+test("cleanup preserves the original encoding of retained URL data", () => {
+  const trackedUrl =
+    "https://example.com/path?keep=~&space=%20&utm_source=x#frag";
+
+  assert.equal(
+    buildPrompt(trackedUrl, DEFAULT_SETTINGS),
+    "https://example.com/path?keep=~&space=%20#frag"
+  );
+});
+
+test("cleanup removes duplicate and percent-encoded tracking parameter names", () => {
+  const trackedUrl =
+    "https://example.com/path?%75tm_source=first&keep=1&utm_source=second";
+
+  assert.equal(
+    buildPrompt(trackedUrl, DEFAULT_SETTINGS),
+    "https://example.com/path?keep=1"
+  );
+});
+
+test("cleanup is case-sensitive and does not inspect URL fragments", () => {
+  const value =
+    "https://example.com/path?UTM_SOURCE=keep#?utm_source=fragment";
+
+  assert.equal(buildPrompt(value, DEFAULT_SETTINGS), value);
+});
+
+test("cleanup leaves malformed and non-HTTP URLs unchanged", () => {
+  for (const value of [
+    "not a URL?utm_source=keep",
+    "chrome://extensions/?utm_source=keep"
+  ]) {
+    assert.equal(buildPrompt(value, DEFAULT_SETTINGS), value);
+  }
+});
+
+test("cleanup parses a URL only after finding a tracking parameter candidate", () => {
+  const OriginalURL = globalThis.URL;
+  let constructions = 0;
+  class CountingURL extends OriginalURL {
+    constructor(url: string | URL, base?: string | URL) {
+      constructions += 1;
+      super(url, base);
+    }
+  }
+  Object.defineProperty(globalThis, "URL", {
+    configurable: true,
+    value: CountingURL
+  });
+
+  try {
+    buildPrompt("https://example.com/path", DEFAULT_SETTINGS);
+    buildPrompt("https://example.com/path?keep=1#frag", DEFAULT_SETTINGS);
+    assert.equal(constructions, 0);
+
+    buildPrompt("https://example.com/path?utm_source=x", DEFAULT_SETTINGS);
+    assert.equal(constructions, 1);
+  } finally {
+    Object.defineProperty(globalThis, "URL", {
+      configurable: true,
+      value: OriginalURL
+    });
+  }
+});
+
+test("tracking-parameter cleanup can be disabled", () => {
+  const trackedUrl = "https://example.com/article?utm_source=newsletter&article=42#comments";
+
+  assert.equal(
+    buildPrompt(trackedUrl, { ...DEFAULT_SETTINGS, stripTrackingParameters: false }),
+    trackedUrl
   );
 });
 
@@ -67,6 +179,7 @@ test("missing or invalid persisted settings fall back safely", () => {
     {
       optionalText: "Question",
       placement: "prepend",
+      stripTrackingParameters: true,
       autoSubmit: true,
       autoClose: false
     }
@@ -79,6 +192,7 @@ test("automatic submission and closing settings are restored", () => {
     {
       optionalText: "",
       placement: "prepend",
+      stripTrackingParameters: true,
       autoSubmit: false,
       autoClose: true
     }
@@ -322,6 +436,7 @@ function optionsFields(): OptionsFields {
   return {
     optionalText: { value: "Summarize" },
     placement: { value: "append" },
+    stripTrackingParameters: { checked: true },
     autoSubmit: { checked: true },
     autoClose: { checked: false, disabled: false },
     status: { textContent: "" }

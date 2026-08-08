@@ -3,6 +3,7 @@ export type OptionalTextPlacement = "prepend" | "append";
 export interface Settings {
   optionalText: string;
   placement: OptionalTextPlacement;
+  stripTrackingParameters: boolean;
   autoSubmit: boolean;
   autoClose: boolean;
 }

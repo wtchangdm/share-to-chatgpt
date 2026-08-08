@@ -54,7 +54,27 @@ Documentation-only, comment-only, formatting-only, and generated-artifact change
 - `src/submission.ts`: pure submission-confirmation policy.
 - `src/types.ts`: settings, dispatch, and message types.
 - `tests/`: automated tests. Ensure the test runner includes every added test entry point.
-- `scripts/`: build and test runners.
+- `scripts/`: build, test, and repeatable performance-measurement runners.
+
+## Performance validation
+
+Treat changes to URL cleanup, prompt construction, dispatch hot paths, DOM observation or polling, and other latency- or allocation-sensitive runtime boundaries as critical performance changes.
+
+For every critical performance change:
+
+1. Run the relevant benchmark on the unchanged implementation before editing.
+2. Run the same command after editing on the same machine and Node version.
+3. Report the command, environment, fixed benchmark method, and before/after median measurements separately from correctness checks.
+4. If no relevant benchmark exists, add a deterministic, repeatable harness before changing production code. The harness must exercise bundled production code, use fixed inputs, validate outputs, warm up before measurement, run multiple fixed-size samples, and report a median. Do not enforce machine-dependent wall-clock thresholds in `npm run check`.
+5. Add a deterministic automated guard for material algorithmic properties when practical; timing measurements do not replace correctness tests.
+
+For query-string cleanup, use:
+
+```sh
+npm run benchmark:query-stripping
+```
+
+Its fixed scenarios cover URLs with no query, clean query parameters, tracking parameters, and encoded retained data.
 
 ## Validation
 

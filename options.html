@@ -21,6 +21,21 @@
         </select>
 
         <fieldset>
+          <legend>Link cleanup</legend>
+          <label class="checkbox" for="strip-tracking-parameters">
+            <input
+              id="strip-tracking-parameters"
+              type="checkbox"
+              aria-describedby="strip-tracking-help"
+            >
+            Remove common tracking parameters from shared URLs
+          </label>
+          <p id="strip-tracking-help" class="help">
+            Other query parameters and URL fragments are preserved.
+          </p>
+        </fieldset>
+
+        <fieldset>
           <legend>Automation</legend>
           <label class="checkbox" for="auto-submit">
             <input id="auto-submit" type="checkbox">
