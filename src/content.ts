@@ -16,7 +16,7 @@ const PROMPT_UPDATE_TIMEOUT_MS = 3_000;
 const SUBMISSION_CONFIRM_TIMEOUT_MS = 2_000;
 const ASSISTANT_MESSAGE_TIMEOUT_MS = 10_000;
 
-function takeDispatchId(): string | null {
+export function takeDispatchId(): string | null {
   if (!location.hash.startsWith(MARKER_PREFIX)) {
     return null;
   }
@@ -40,7 +40,10 @@ function normalizeComposerText(text: string): string {
     .trim();
 }
 
-function composerHasPrompt(composer: ComposerElement, expectedPrompt: string): boolean {
+export function composerHasPrompt(
+  composer: ComposerElement,
+  expectedPrompt: string
+): boolean {
   return normalizeComposerText(readComposerText(composer)) ===
     normalizeComposerText(expectedPrompt);
 }
@@ -132,7 +135,7 @@ function setContentEditableValue(composer: HTMLElement, prompt: string): void {
   }
 }
 
-function insertPrompt(composer: ComposerElement, prompt: string): void {
+export function insertPrompt(composer: ComposerElement, prompt: string): void {
   if (composer instanceof HTMLTextAreaElement) {
     setTextareaValue(composer, prompt);
     return;
@@ -164,7 +167,7 @@ async function reportFailure(dispatchId: string, error: string): Promise<void> {
   }
 }
 
-async function runDispatch(dispatchId: string): Promise<void> {
+export async function runDispatch(dispatchId: string): Promise<void> {
   let dispatch: DispatchPayload | undefined;
 
   try {
@@ -299,7 +302,9 @@ async function runDispatch(dispatchId: string): Promise<void> {
   }
 }
 
-const dispatchId = takeDispatchId();
-if (dispatchId) {
-  void runDispatch(dispatchId);
+if (typeof location !== "undefined") {
+  const dispatchId = takeDispatchId();
+  if (dispatchId) {
+    void runDispatch(dispatchId);
+  }
 }
