@@ -28,6 +28,7 @@ const PROGRESS_ACTION_TITLE = "Share to ChatGPT: dispatch in progress";
 const SUBMITTED_ACTION_TITLE = "Share to ChatGPT: prompt submitted";
 const PREFILLED_ACTION_TITLE = "Share to ChatGPT: prompt ready in ChatGPT";
 const sourceStatusQueues = new Map<number, Promise<void>>();
+const dispatchQueues = new Map<string, Promise<void>>();
 
 function dispatchKey(dispatchId: string): string {
   return `${DISPATCH_STORAGE_PREFIX}${dispatchId}`;
@@ -95,6 +96,21 @@ async function setFailureDiagnostic(
     setBadge(tabId, "!"),
     setActionTitle(tabId, getFailureActionTitle(error))
   ]);
+}
+
+function queueDispatch<T>(dispatchId: string, update: () => Promise<T>): Promise<T> {
+  const previous = dispatchQueues.get(dispatchId) ?? Promise.resolve();
+  const result = previous.then(update);
+  const queued = result.then(
+    () => undefined,
+    () => undefined
+  );
+  dispatchQueues.set(dispatchId, queued);
+  return result.finally(() => {
+    if (dispatchQueues.get(dispatchId) === queued) {
+      dispatchQueues.delete(dispatchId);
+    }
+  });
 }
 
 function queueSourceStatus(tabId: number, update: () => Promise<void>): Promise<void> {
@@ -219,11 +235,16 @@ async function failDispatch(dispatch: DispatchPayload, error: string): Promise<v
   await clearDispatch(dispatch);
 }
 
-async function expireDispatch(dispatchId: string): Promise<void> {
-  const dispatch = await getDispatch(dispatchId);
-  if (dispatch && Date.now() >= dispatch.expiresAt) {
-    await failDispatch(dispatch, "Dispatch timed out before submission completed.");
-  }
+async function expireDispatch(
+  dispatchId: string,
+  error = "Dispatch timed out before submission completed."
+): Promise<void> {
+  await queueDispatch(dispatchId, async () => {
+    const dispatch = await getDispatch(dispatchId);
+    if (dispatch && Date.now() >= dispatch.expiresAt) {
+      await failDispatch(dispatch, error);
+    }
+  });
 }
 
 function scheduleExpiration(dispatch: DispatchPayload): void {
@@ -423,8 +444,8 @@ async function cleanExpiredDispatches(): Promise<void> {
   const entries = await chrome.storage.session.get(null);
   const expired = findExpiredDispatches(entries, Date.now());
 
-  await Promise.all(expired.map((dispatch) => failDispatch(
-    dispatch,
+  await Promise.all(expired.map((dispatch) => expireDispatch(
+    dispatch.id,
     "Removed an expired dispatch during cleanup."
   )));
 }
@@ -470,15 +491,17 @@ chrome.tabs.onRemoved.addListener((tabId) => {
     const result = await chrome.storage.session.get(key);
     const dispatchId = result[key];
     if (typeof dispatchId === "string") {
-      const dispatch = await getDispatch(dispatchId);
-      if (dispatch) {
-        await Promise.all([
-          clearSourceStatus(dispatch),
-          clearDispatch(dispatch)
-        ]);
-      } else {
-        await chrome.storage.session.remove(key);
-      }
+      await queueDispatch(dispatchId, async () => {
+        const dispatch = await getDispatch(dispatchId);
+        if (dispatch) {
+          await Promise.all([
+            clearSourceStatus(dispatch),
+            clearDispatch(dispatch)
+          ]);
+        } else {
+          await chrome.storage.session.remove(key);
+        }
+      });
     }
     await chrome.storage.session.remove(sourceStatusKey(tabId));
     sourceStatusQueues.delete(tabId);
@@ -490,7 +513,10 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
     return false;
   }
 
-  void handleContentMessage(message, sender)
+  void queueDispatch(
+    message.dispatchId,
+    () => handleContentMessage(message, sender)
+  )
     .then(sendResponse)
     .catch((error: unknown) => {
       const detail = error instanceof Error ? error.message : String(error);

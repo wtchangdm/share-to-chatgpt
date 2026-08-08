@@ -193,13 +193,22 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
       error: "Dispatch belongs to a different tab."
     });
 
-    const claim = await sendContentMessage(
-      messageListener,
-      { type: "claim-dispatch", dispatchId: pending.id },
-      20
-    );
-    assert.equal(claim.ok, true);
-    if (!claim.ok || !claim.dispatch) {
+    const concurrentClaims = await Promise.all([
+      sendContentMessage(
+        messageListener,
+        { type: "claim-dispatch", dispatchId: pending.id },
+        20
+      ),
+      sendContentMessage(
+        messageListener,
+        { type: "claim-dispatch", dispatchId: pending.id },
+        20
+      )
+    ]);
+    assert.equal(concurrentClaims.filter((response) => response.ok).length, 1);
+    assert.equal(concurrentClaims.filter((response) => !response.ok).length, 1);
+    const claim = concurrentClaims.find((response) => response.ok);
+    if (!claim?.ok || !claim.dispatch) {
       return;
     }
     assert.equal(claim.dispatch.status, "claimed");
@@ -214,11 +223,20 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
       error: "Dispatch was already claimed."
     });
 
-    assert.deepEqual(await sendContentMessage(
-      messageListener,
-      { type: "arm-dispatch", dispatchId: pending.id },
-      20
-    ), { ok: true });
+    const concurrentArms = await Promise.all([
+      sendContentMessage(
+        messageListener,
+        { type: "arm-dispatch", dispatchId: pending.id },
+        20
+      ),
+      sendContentMessage(
+        messageListener,
+        { type: "arm-dispatch", dispatchId: pending.id },
+        20
+      )
+    ]);
+    assert.equal(concurrentArms.filter((response) => response.ok).length, 1);
+    assert.equal(concurrentArms.filter((response) => !response.ok).length, 1);
     assert.equal(dispatchEntries(session)[0]?.status, "submitting");
 
     assert.deepEqual(await sendContentMessage(
