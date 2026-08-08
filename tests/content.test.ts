@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   composerHasPrompt,
   insertPrompt,
+  isPersistedConversationPath,
   runDispatch,
   takeDispatchId
 } from "../src/content";
@@ -15,6 +16,7 @@ interface InstalledDom {
   button: FakeButton;
   form: FakeForm;
   assistantMessages: Array<{ textContent: string }>;
+  setPathname(pathname: string): void;
   restore(): void;
 }
 
@@ -41,9 +43,14 @@ class FakeButton {
 class FakeForm {
   submittedButtons: FakeButton[] = [];
   onSubmit: (() => void) | undefined;
+  sendButtonAvailable = true;
+  stopButtonAvailable = false;
 
-  querySelector(): FakeButton {
-    return this.button;
+  querySelector(selector: string): FakeButton | null {
+    if (selector === 'button[data-testid="stop-button"]') {
+      return this.stopButtonAvailable ? this.button : null;
+    }
+    return this.sendButtonAvailable ? this.button : null;
   }
 
   constructor(private readonly button: FakeButton) {}
@@ -93,6 +100,7 @@ function installDom(): InstalledDom {
   const form = new FakeForm(button);
   const textarea = new FakeTextarea(form);
   const assistantMessages: Array<{ textContent: string }> = [];
+  let pathname = "/c/WEB:b7811973-aee5-448a-97fb-9af93b1786f8";
 
   setGlobal("HTMLTextAreaElement", FakeTextarea);
   setGlobal("HTMLButtonElement", FakeButton);
@@ -117,12 +125,20 @@ function installDom(): InstalledDom {
     setInterval: globalThis.setInterval.bind(globalThis),
     setTimeout: globalThis.setTimeout.bind(globalThis)
   });
+  setGlobal("location", {
+    get pathname() {
+      return pathname;
+    }
+  });
 
   return {
     textarea,
     button,
     form,
     assistantMessages,
+    setPathname(updatedPathname: string) {
+      pathname = updatedPathname;
+    },
     restore() {
       for (const [name, descriptor] of originals) {
         if (descriptor) {
@@ -150,6 +166,17 @@ function claimedDispatch(overrides: Partial<DispatchPayload> = {}): DispatchPayl
     ...overrides
   };
 }
+
+test("only canonical UUID conversation paths count as persisted", () => {
+  assert.equal(isPersistedConversationPath(
+    "/c/6a76e003-92b8-83e8-90ef-22ce9ea8e8a3"
+  ), true);
+  assert.equal(isPersistedConversationPath(
+    "/c/WEB:b7811973-aee5-448a-97fb-9af93b1786f8"
+  ), false);
+  assert.equal(isPersistedConversationPath("/c/not-a-conversation-id"), false);
+  assert.equal(isPersistedConversationPath("/"), false);
+});
 
 test("the dispatch marker is consumed without changing the prompt query", () => {
   const originalLocation = Object.getOwnPropertyDescriptor(globalThis, "location");
@@ -210,16 +237,73 @@ test("textarea fallback injection is read back with exact prompt verification", 
   }
 });
 
-test("a verified prompt is armed, submitted once, and closed after a response starts", async () => {
+test("an incomplete assistant response leaves the submitted tab open", async () => {
   const dom = installDom();
-  const messages: string[] = [];
   const closeRequests: boolean[] = [];
-  const dispatch = claimedDispatch();
+  const dispatch = claimedDispatch({ expiresAt: Date.now() + 700 });
   dom.textarea.value = prompt;
   dom.form.onSubmit = () => {
     dom.textarea.value = "";
     dom.button.disabled = true;
+    dom.form.sendButtonAvailable = false;
+    dom.form.stopButtonAvailable = true;
+    dom.assistantMessages.push({ textContent: "Response still streaming" });
+  };
+
+  const originalChrome = globalThis.chrome;
+  Object.defineProperty(globalThis, "chrome", {
+    configurable: true,
+    value: {
+      runtime: {
+        async sendMessage(message: {
+          type: string;
+          closeTab?: boolean;
+        }): Promise<DispatchResponse> {
+          if (message.type === "claim-dispatch") {
+            return { ok: true, dispatch };
+          }
+          if (message.type === "complete-dispatch") {
+            closeRequests.push(message.closeTab === true);
+          }
+          return { ok: true };
+        }
+      }
+    }
+  });
+
+  try {
+    await runDispatch(dispatch.id);
+
+    assert.deepEqual(dom.form.submittedButtons, [dom.button]);
+    assert.deepEqual(closeRequests, [false]);
+  } finally {
+    Object.defineProperty(globalThis, "chrome", {
+      configurable: true,
+      value: originalChrome
+    });
+    dom.restore();
+  }
+});
+
+test("a verified prompt closes after its canonical conversation URL is assigned", async () => {
+  const dom = installDom();
+  const messages: string[] = [];
+  const closeRequests: boolean[] = [];
+  const statesAtCompletion: Array<{
+    pathname: string;
+    stopAvailable: boolean;
+  }> = [];
+  const dispatch = claimedDispatch({ expiresAt: Date.now() + 1_500 });
+  dom.textarea.value = prompt;
+  dom.form.onSubmit = () => {
+    dom.textarea.value = "";
+    dom.button.disabled = true;
+    dom.form.sendButtonAvailable = false;
+    dom.form.stopButtonAvailable = true;
     dom.assistantMessages.push({ textContent: "Response started" });
+    setTimeout(() => {
+      dom.setPathname("/c/6a76e003-92b8-83e8-90ef-22ce9ea8e8a3");
+    }, 10);
   };
 
   const originalChrome = globalThis.chrome;
@@ -237,6 +321,10 @@ test("a verified prompt is armed, submitted once, and closed after a response st
           }
           if (message.type === "complete-dispatch") {
             closeRequests.push(message.closeTab === true);
+            statesAtCompletion.push({
+              pathname: location.pathname,
+              stopAvailable: dom.form.stopButtonAvailable
+            });
           }
           return { ok: true };
         }
@@ -255,6 +343,10 @@ test("a verified prompt is armed, submitted once, and closed after a response st
     assert.deepEqual(dom.form.submittedButtons, [dom.button]);
     assert.equal(dom.button.clickCount, 0);
     assert.deepEqual(closeRequests, [true]);
+    assert.deepEqual(statesAtCompletion, [{
+      pathname: "/c/6a76e003-92b8-83e8-90ef-22ce9ea8e8a3",
+      stopAvailable: true
+    }]);
   } finally {
     Object.defineProperty(globalThis, "chrome", {
       configurable: true,

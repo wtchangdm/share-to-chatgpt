@@ -2,6 +2,7 @@ import {
   countStartedAssistantMessages,
   findComposer,
   findComposerForm,
+  findResponseStopButton,
   findSendButton,
   isSendButtonEnabled,
   readComposerText,
@@ -11,10 +12,15 @@ import { isSubmissionConfirmed } from "./submission";
 import type { ContentMessage, DispatchPayload, DispatchResponse } from "./types";
 
 const MARKER_PREFIX = "#share-to-chatgpt-dispatch=";
+const PERSISTED_CONVERSATION_PATH =
+  /^\/c\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\/?$/i;
 const PREFILL_GRACE_MS = 4_000;
 const PROMPT_UPDATE_TIMEOUT_MS = 3_000;
 const SUBMISSION_CONFIRM_TIMEOUT_MS = 2_000;
-const ASSISTANT_MESSAGE_TIMEOUT_MS = 10_000;
+
+export function isPersistedConversationPath(pathname: string): boolean {
+  return PERSISTED_CONVERSATION_PATH.test(pathname);
+}
 
 export function takeDispatchId(): string | null {
   if (!location.hash.startsWith(MARKER_PREFIX)) {
@@ -245,6 +251,7 @@ export async function runDispatch(dispatchId: string): Promise<void> {
     if (!armed.ok) {
       throw new Error(armed.error);
     }
+    const autoCloseDeadline = armed.dispatch?.expiresAt ?? deadline;
 
     const assistantMessageCount = countStartedAssistantMessages();
     submitPrompt(ready.composer, ready.button);
@@ -271,15 +278,29 @@ export async function runDispatch(dispatchId: string): Promise<void> {
 
     let closeTab = false;
     if (claimedDispatch.autoClose) {
-      const responseStarted = await waitFor(
-        () => countStartedAssistantMessages() > assistantMessageCount ? true : null,
-        Math.min(deadline - 500, Date.now() + ASSISTANT_MESSAGE_TIMEOUT_MS)
-      );
-      closeTab = responseStarted === true;
+      let responseWasStreaming = false;
+      const responseCompleted = await waitFor(() => {
+        const currentComposer = findComposer();
+        if (!currentComposer) {
+          return null;
+        }
+        const responseStopButton = findResponseStopButton(currentComposer);
+        if (responseStopButton) {
+          responseWasStreaming = true;
+        }
+        if (countStartedAssistantMessages() <= assistantMessageCount) {
+          return null;
+        }
+        if (isPersistedConversationPath(location.pathname)) {
+          return true;
+        }
+        return responseWasStreaming && !responseStopButton ? true : null;
+      }, autoCloseDeadline - 500);
+      closeTab = responseCompleted === true;
       if (!closeTab) {
         console.error(
-          "[Share to ChatGPT] Submission succeeded, but an assistant message did not start " +
-          "before timeout; leaving the tab open."
+          "[Share to ChatGPT] Submission succeeded, but conversation persistence or " +
+          "response completion could not be verified before timeout; leaving the tab open."
         );
       }
     }

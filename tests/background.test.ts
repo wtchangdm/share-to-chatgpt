@@ -99,7 +99,9 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
         updatedTabs.push({
           tabId,
           properties,
-          dispatchAtNavigation: dispatchEntries(session)[0]
+          dispatchAtNavigation: dispatchEntries(session).find(
+            (dispatch) => dispatch.targetTabId === tabId
+          )
         });
         return { id: tabId } as chrome.tabs.Tab;
       },
@@ -153,6 +155,7 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
     assert.ok(tabUpdatedListener);
     assert.ok(tabRemovedListener);
 
+    localSettings = { autoClose: true };
     actionClickListener({
       id: 10,
       url: "https://example.com/article?utm_source=newsletter&item=42#details"
@@ -237,7 +240,13 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
     ]);
     assert.equal(concurrentArms.filter((response) => response.ok).length, 1);
     assert.equal(concurrentArms.filter((response) => !response.ok).length, 1);
-    assert.equal(dispatchEntries(session)[0]?.status, "submitting");
+    const armed = concurrentArms.find((response) => response.ok);
+    if (!armed?.ok || !armed.dispatch) {
+      assert.fail("The successful arm response did not include its dispatch.");
+    }
+    assert.equal(armed.dispatch.status, "submitting");
+    assert.ok(armed.dispatch.expiresAt - pending.expiresAt > 90_000);
+    assert.equal(dispatchEntries(session)[0]?.expiresAt, armed.dispatch.expiresAt);
 
     assert.deepEqual(await sendContentMessage(
       messageListener,
@@ -258,15 +267,47 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
     await waitUntil(() => lastBadgeText(badgeUpdates, 10) === "");
     assert.equal(lastActionTitle(titleUpdates, 10), "Send this page to ChatGPT");
 
+    const rateTimerCount = (): number => scheduledTimers.filter((timer) =>
+      timer.delay !== undefined && timer.delay > 0 && timer.delay <= 1_000
+    ).length;
+    const rateTimersBeforeRapidDispatches = rateTimerCount();
     actionClickListener({ id: 30, url: "https://example.com/first" } as chrome.tabs.Tab);
     actionClickListener({ id: 30, url: "https://example.com/second" } as chrome.tabs.Tab);
     await waitUntil(() => updatedTabs.length === 3 && dispatchEntries(session).length === 2);
+    assert.equal(rateTimerCount(), rateTimersBeforeRapidDispatches);
 
     const olderDispatch = dispatchEntries(session).find((entry) => entry.targetTabId === 21);
     const latestDispatch = dispatchEntries(session).find((entry) => entry.targetTabId === 22);
     assert.ok(olderDispatch);
     assert.ok(latestDispatch);
     assert.equal(lastBadgeText(badgeUpdates, 30), "…");
+
+    assert.equal((await Promise.all([
+      sendContentMessage(
+        messageListener,
+        { type: "claim-dispatch", dispatchId: olderDispatch.id },
+        21
+      ),
+      sendContentMessage(
+        messageListener,
+        { type: "claim-dispatch", dispatchId: latestDispatch.id },
+        22
+      )
+    ])).every((response) => response.ok), true);
+    const rateTimersBeforeArming = rateTimerCount();
+    assert.equal((await Promise.all([
+      sendContentMessage(
+        messageListener,
+        { type: "arm-dispatch", dispatchId: olderDispatch.id },
+        21
+      ),
+      sendContentMessage(
+        messageListener,
+        { type: "arm-dispatch", dispatchId: latestDispatch.id },
+        22
+      )
+    ])).every((response) => response.ok), true);
+    assert.equal(rateTimerCount(), rateTimersBeforeArming);
 
     assert.deepEqual(await sendContentMessage(
       messageListener,

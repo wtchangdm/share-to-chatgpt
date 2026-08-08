@@ -1,6 +1,7 @@
 export type ComposerElement = HTMLTextAreaElement | HTMLElement;
 
 export const ASSISTANT_MESSAGE_SELECTOR = '[data-message-author-role="assistant"]';
+export const RESPONSE_STOP_BUTTON_SELECTOR = 'button[data-testid="stop-button"]';
 
 export const SEND_BUTTON_SELECTORS = [
   'button[data-testid="send-button"]',
@@ -57,6 +58,17 @@ export function findSendButton(composer: ComposerElement): HTMLButtonElement | n
   }
 
   return null;
+}
+
+export function findResponseStopButton(
+  composer: ComposerElement
+): HTMLButtonElement | null {
+  const form = findComposerForm(composer);
+  if (!form) {
+    return null;
+  }
+  const candidate = form.querySelector(RESPONSE_STOP_BUTTON_SELECTOR);
+  return candidate instanceof HTMLButtonElement ? candidate : null;
 }
 
 export function isSendButtonEnabled(button: HTMLButtonElement): boolean {

@@ -23,6 +23,7 @@ import {
 } from "../src/prompt";
 import {
   ASSISTANT_MESSAGE_SELECTOR,
+  RESPONSE_STOP_BUTTON_SELECTOR,
   SEND_BUTTON_SELECTORS
 } from "../src/selectors";
 import { isSubmissionConfirmed } from "../src/submission";
@@ -207,10 +208,14 @@ test("a transient dispatch marker is added without changing the prompt query", (
   );
 });
 
-test("automatic closing uses the scoped assistant-message marker", () => {
+test("automatic closing uses narrow response-state markers", () => {
   assert.equal(
     ASSISTANT_MESSAGE_SELECTOR,
     '[data-message-author-role="assistant"]'
+  );
+  assert.equal(
+    RESPONSE_STOP_BUTTON_SELECTOR,
+    'button[data-testid="stop-button"]'
   );
 });
 

@@ -23,6 +23,7 @@ const SETTINGS_KEY = "settings";
 const TAB_PREFIX = "tab-dispatch:";
 const SOURCE_STATUS_PREFIX = "source-status:";
 const DISPATCH_TIMEOUT_MS = 15_000;
+const AUTO_CLOSE_RESPONSE_TIMEOUT_MS = 120_000;
 const SUCCESS_BADGE_MS = 2_000;
 const PROGRESS_ACTION_TITLE = "Share to ChatGPT: dispatch in progress";
 const SUBMITTED_ACTION_TITLE = "Share to ChatGPT: prompt submitted";
@@ -411,8 +412,14 @@ async function handleContentMessage(
     if (!armed.ok) {
       return armed;
     }
+    if (armed.dispatch.autoClose) {
+      armed.dispatch.expiresAt = Date.now() + AUTO_CLOSE_RESPONSE_TIMEOUT_MS;
+    }
     await saveDispatch(armed.dispatch);
-    return { ok: true };
+    if (armed.dispatch.autoClose) {
+      scheduleExpiration(armed.dispatch);
+    }
+    return { ok: true, dispatch: armed.dispatch };
   }
 
   if (message.type === "complete-dispatch") {

@@ -17,7 +17,7 @@ javascript:(()=>{window.open(`https://chatgpt.com/?prompt=${encodeURIComponent(l
 - Removes common campaign and click-tracking parameters while preserving other URL data.
 - Supports optional text before or after the URL.
 - Can prefill without submitting.
-- Can close the ChatGPT tab after ChatGPT starts responding.
+- Can close the ChatGPT tab after ChatGPT assigns a canonical conversation URL and starts responding.
 - Shows data-safe progress, success, and failure states on the extension action.
 - Uses the existing signed-in `chatgpt.com` session—no OpenAI API key or paid API.
 
@@ -54,7 +54,7 @@ Reload the extension from `chrome://extensions` after rebuilding it.
 | Optional text | Empty | Added before or after the URL. Line breaks are normalized to spaces. |
 | Remove common tracking parameters from shared URLs | On | Removes the known parameters listed below while preserving other query parameters and fragments. |
 | Automatically submit the prompt | On | Turn off to prefill the composer without submitting. |
-| Close the ChatGPT tab after ChatGPT starts responding | Off | Closes only after the first non-empty assistant message appears. Requires automatic submission. |
+| Close the ChatGPT tab after ChatGPT assigns a conversation URL and starts responding | Off | Closes after a canonical `/c/<UUID>` conversation URL and a new non-empty assistant message appear. If the canonical URL is unavailable, response completion is the fallback. Waits up to approximately two minutes. Requires automatic submission. |
 
 With link cleanup enabled, the extension removes these exact, case-sensitive parameter names from HTTP and HTTPS URLs:
 

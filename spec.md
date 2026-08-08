@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Replace the foreground-interrupting bookmarklet workflow with a local Chrome extension that opens ChatGPT in a background tab, safely prefills the expected prompt, and optionally submits and closes the tab.
+Replace the foreground-interrupting bookmarklet workflow with a local Chrome extension that opens ChatGPT in a background tab, safely prefills the expected prompt, and optionally submits and closes the tab after ChatGPT assigns a canonical conversation URL and starts responding.
 
 The original bookmarklet workflow is:
 
@@ -26,7 +26,7 @@ https://chatgpt.com/?prompt=<encoded cleaned target URL>
 4. Keep the original tab active.
 5. Verify or inject the prompt in the ChatGPT composer.
 6. Submit when automatic submission is enabled.
-7. Optionally close the ChatGPT tab after the first non-empty assistant message appears.
+7. Optionally close the ChatGPT tab after a new non-empty assistant message appears and the temporary `/c/WEB:<UUID>` path changes to a canonical `/c/<UUID>` conversation path. If no canonical path is observed, completed streaming is the fail-safe fallback.
 
 ### Link context menu
 
@@ -48,7 +48,7 @@ Settings are stored under `settings` in `chrome.storage.local`.
 | `placement` | `"prepend" \| "append"` | `"prepend"` | Whether optional text appears before or after the URL. |
 | `stripTrackingParameters` | `boolean` | `true` | Whether known tracking parameters are removed before prompt construction. |
 | `autoSubmit` | `boolean` | `true` | Whether the verified prompt is submitted automatically. |
-| `autoClose` | `boolean` | `false` | Whether the target tab closes after ChatGPT starts responding. Effective only when `autoSubmit` is enabled. |
+| `autoClose` | `boolean` | `false` | Whether the target tab closes after ChatGPT assigns a canonical conversation URL and starts responding. Effective only when `autoSubmit` is enabled. |
 
 A blank optional-text value produces only the cleaned or original target URL. Non-empty optional text and the URL are separated by one space. Line breaks in optional text are normalized to spaces to avoid contenteditable paragraph mismatches.
 
@@ -131,7 +131,7 @@ No all-sites permission, paid OpenAI API, ChatGPT `/backend-api/` access, or thi
 7. The service worker verifies the sender's bound tab ID and changes the dispatch state to `claimed`.
 8. The content script verifies the expected prompt or injects it and verifies the resulting composer state.
 9. If `autoSubmit` is disabled, the dispatch completes in the `claimed` state and the tab remains open.
-10. If `autoSubmit` is enabled, the content script requests the `claimed → submitting` transition before invoking submission.
+10. If `autoSubmit` is enabled, the content script requests the `claimed → submitting` transition before invoking submission. When auto-close is enabled, the successful transition extends the dispatch expiry to approximately 120 seconds so conversation persistence or the response-completion fallback can be verified.
 11. A successful or final failed dispatch removes its session payload and tab index. Closing the target tab also removes its state.
 
 A dispatch can be claimed and armed only once. The state transition before submission favors a missed submission over a duplicated submission if execution is interrupted at the boundary.
@@ -142,14 +142,14 @@ The source tab's extension action shows a blue `…` while its latest dispatch i
 
 ChatGPT is treated as a client-rendered application. Readiness uses `MutationObserver` plus bounded 250 ms fallback polling; it does not rely on a fixed page-load sleep.
 
-The dispatch expires approximately 15 seconds after creation. Expiration is checked on every dispatch message, at service-worker startup, and opportunistically before a new dispatch. Service-worker timers provide prompt cleanup while the worker remains active; correctness does not depend on exact timer delivery.
+A pending or claimed dispatch expires approximately 15 seconds after creation. Arming an auto-close dispatch extends its expiry to approximately 120 seconds from that transition; other armed dispatches retain the original expiry. Expiration is checked on every dispatch message, at service-worker startup, and opportunistically before a new dispatch. Service-worker timers provide prompt cleanup while the worker remains active; correctness does not depend on exact timer delivery.
 
 Current bounded phases are:
 
 - Deep-link prefill grace: up to 4 seconds.
 - Prompt injection verification: up to 3 seconds.
 - Submission confirmation: up to 2 seconds.
-- Assistant-message detection for auto-close: up to 10 seconds, bounded by the remaining dispatch lifetime.
+- Conversation-persistence and assistant-response detection for auto-close: bounded by the extended dispatch lifetime of approximately 120 seconds from arming.
 
 ## Selector strategy
 
@@ -177,13 +177,18 @@ The extension never searches the entire page for a button whose visible text mer
 
 ### Assistant response
 
-Auto-close uses one narrow marker:
+Auto-close uses two narrow DOM markers and one narrow path pattern:
 
 ```css
 [data-message-author-role="assistant"]
+button[data-testid="stop-button"] /* restricted to the composer's form */
 ```
 
-The target tab closes after the count of non-empty matching messages increases. It does not inspect or store the assistant response text.
+```text
+/c/<UUID>
+```
+
+A higher count of non-empty assistant-message markers establishes that a new response started. The observed ChatGPT flow first uses `/c/WEB:<UUID>` and then replaces it with canonical `/c/<UUID>` after assigning the conversation. Auto-close accepts only a UUID-shaped canonical path; unrelated and temporary paths fail closed. Once both the canonical path and new assistant message exist, the tab may close while the Stop button is still present. If the canonical path is not observed, an observed Stop-button present-to-absent transition plus the new assistant message provides the slower response-completion fallback. The extension does not inspect or store the assistant response text.
 
 ## Prompt insertion
 
@@ -217,7 +222,7 @@ form.requestSubmit(button);
 
 Submission is confirmed when the composer remains observable and either no longer contains the expected prompt or its Send button becomes disabled. A temporarily missing composer is treated as uncertainty and does not confirm submission.
 
-When `autoClose` is enabled, the content script records the number of non-empty assistant messages before submitting and waits for that count to increase. It then asks the service worker to close the target tab with `chrome.tabs.remove`. If no assistant message starts before the bounded timeout, the submitted tab remains open.
+When `autoClose` is enabled, the content script records the number of non-empty assistant messages before submitting, checks for a canonical UUID conversation path, and observes the composer's form for the exact `button[data-testid="stop-button"]` streaming control. It asks the service worker to close the target tab with `chrome.tabs.remove` as soon as both a canonical path and a new non-empty assistant message exist; it does not wait for the full response. If no canonical path is observed, it closes only after the Stop button has been observed and then disappears and the assistant-message count increases. If neither condition can be verified before the bounded timeout, the submitted tab remains open.
 
 ## Failure behavior
 
@@ -243,7 +248,7 @@ Handled conditions include:
 - Changed ChatGPT selectors.
 - Closely timed multiple dispatches.
 
-A missing assistant-message marker after a confirmed submission is nonfatal: the extension logs a console error, consumes the completed dispatch, and leaves the tab open. It does not show a failure badge for a message that was already submitted.
+A missing assistant-message marker or unverified auto-close condition after a confirmed submission is nonfatal: the extension logs a console error, consumes the completed dispatch, and leaves the tab open. It does not show a failure badge for a message that was already submitted.
 
 ## Security and privacy
 
@@ -276,7 +281,7 @@ Run the cases relevant to a change and report which cases were verified in the c
 - Log out of ChatGPT or block the composer, dispatch again, and confirm no prompt is submitted, the tab remains open, and a red `!` badge or error appears.
 - Open an unrelated ChatGPT tab and confirm it does not auto-submit anything.
 - Disable automatic submission and confirm the correct prompt is prefilled but not submitted.
-- Enable automatic closing and confirm the background tab closes only after the first assistant text appears.
+- Enable automatic closing and confirm the background tab remains open on `/c/WEB:<UUID>`, then closes after a canonical `/c/<UUID>` path and a new non-empty assistant message appear, without waiting for the full response.
 - Reload the extension and confirm automation settings retain their saved values.
 
 ## Inherently fragile behavior

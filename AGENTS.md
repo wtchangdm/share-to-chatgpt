@@ -76,6 +76,22 @@ npm run benchmark:query-stripping
 
 Its fixed scenarios cover URLs with no query, clean query parameters, tracking parameters, and encoded retained data.
 
+For automatic-close DOM observation, use:
+
+```sh
+npm run benchmark:auto-close-observation
+```
+
+Its fixed scenario exercises the bundled assistant-message and composer selectors plus the scoped Send- and Stop-button observations.
+
+For dispatch transition changes, use:
+
+```sh
+npm run benchmark:dispatch-policy
+```
+
+Its fixed scenario exercises bundled claim and arm transitions with a bound target tab.
+
 ## Validation
 
 During TDD, run the narrowest relevant test for fast red/green feedback. Before completing any code change, run:

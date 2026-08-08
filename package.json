@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "benchmark:auto-close-observation": "node --expose-gc scripts/benchmark-auto-close-observation.mjs",
+    "benchmark:dispatch-policy": "node --expose-gc scripts/benchmark-dispatch-policy.mjs",
     "benchmark:query-stripping": "node --expose-gc scripts/benchmark-query-stripping.mjs",
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
