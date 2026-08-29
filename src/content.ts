@@ -22,6 +22,19 @@ export function isPersistedConversationPath(pathname: string): boolean {
   return PERSISTED_CONVERSATION_PATH.test(pathname);
 }
 
+export function createAssistantResponseTracker(
+  initialMessageCount: number,
+  readMessageCount: () => number = countStartedAssistantMessages
+): () => boolean {
+  let responseStarted = false;
+  return () => {
+    if (!responseStarted) {
+      responseStarted = readMessageCount() > initialMessageCount;
+    }
+    return responseStarted;
+  };
+}
+
 export function takeDispatchId(): string | null {
   if (!location.hash.startsWith(MARKER_PREFIX)) {
     return null;
@@ -279,6 +292,9 @@ export async function runDispatch(dispatchId: string): Promise<void> {
     let closeTab = false;
     if (claimedDispatch.autoClose) {
       let responseWasStreaming = false;
+      const assistantResponseStarted = createAssistantResponseTracker(
+        assistantMessageCount
+      );
       const responseCompleted = await waitFor(() => {
         const currentComposer = findComposer();
         if (!currentComposer) {
@@ -288,14 +304,13 @@ export async function runDispatch(dispatchId: string): Promise<void> {
         if (responseStopButton) {
           responseWasStreaming = true;
         }
-        const assistantResponseStarted =
-          countStartedAssistantMessages() > assistantMessageCount;
+        const assistantMessageStarted = assistantResponseStarted();
         if (isPersistedConversationPath(location.pathname) &&
-          (responseStopButton || assistantResponseStarted)) {
+          (responseStopButton || assistantMessageStarted)) {
           return true;
         }
         return responseWasStreaming && !responseStopButton &&
-          assistantResponseStarted
+          assistantMessageStarted
           ? true
           : null;
       }, autoCloseDeadline - 500);

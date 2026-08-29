@@ -3,6 +3,7 @@ import { build } from "esbuild";
 const ITERATIONS = 200_000;
 const SAMPLES = 7;
 const WARMUP_ITERATIONS = 20_000;
+const BASELINE_ASSISTANT_MESSAGES = 200;
 
 class FakeHTMLElement {
   isContentEditable = false;
@@ -54,11 +55,14 @@ const button = new FakeHTMLButtonElement();
 const stopButton = new FakeHTMLButtonElement();
 const form = new FakeHTMLFormElement(button, stopButton);
 const composer = new FakeHTMLTextAreaElement(form);
-const assistantMessages = [
-  { textContent: "Earlier response" },
+const assistantMessages = Array.from(
+  { length: BASELINE_ASSISTANT_MESSAGES },
+  (_, index) => ({ textContent: `Earlier response ${index}` })
+);
+assistantMessages.push(
   { textContent: " " },
   { textContent: "Current response" }
-];
+);
 
 globalThis.document = {
   querySelector(selector) {
@@ -71,9 +75,16 @@ globalThis.document = {
   }
 };
 
-async function loadProductionSelectors() {
+async function loadProductionModules() {
   const result = await build({
-    entryPoints: ["src/selectors.ts"],
+    stdin: {
+      contents: `
+        import * as content from "./src/content.ts";
+        export { content };
+        export * from "./src/selectors.ts";
+      `,
+      resolveDir: process.cwd()
+    },
     bundle: true,
     write: false,
     format: "esm",
@@ -90,8 +101,18 @@ async function loadProductionSelectors() {
   return import(moduleUrl);
 }
 
-function observe(selectors) {
-  const assistantCount = selectors.countStartedAssistantMessages();
+function createResponseStartedCheck(production) {
+  const readAssistantCount = () => production.countStartedAssistantMessages();
+  return typeof production.content.createAssistantResponseTracker === "function"
+    ? production.content.createAssistantResponseTracker(
+      BASELINE_ASSISTANT_MESSAGES,
+      readAssistantCount
+    )
+    : () => readAssistantCount() > BASELINE_ASSISTANT_MESSAGES;
+}
+
+function observe(selectors, responseStarted) {
+  const assistantResponseStarted = responseStarted();
   const currentComposer = selectors.findComposer();
   const sendButton = currentComposer
     ? selectors.findSendButton(currentComposer)
@@ -104,14 +125,14 @@ function observe(selectors) {
     : null;
   const responseStreaming = composerForm
     ?.querySelector('button[data-testid="stop-button"]') === stopButton;
-  return assistantCount + Number(currentComposer === composer) +
+  return Number(assistantResponseStarted) + Number(currentComposer === composer) +
     Number(sendButtonEnabled) + Number(responseStreaming);
 }
 
-function runIterations(selectors, iterations) {
+function runIterations(selectors, responseStarted, iterations) {
   let checksum = 0;
   for (let iteration = 0; iteration < iterations; iteration += 1) {
-    checksum += observe(selectors);
+    checksum += observe(selectors, responseStarted);
   }
   return checksum;
 }
@@ -121,19 +142,20 @@ function median(values) {
   return sorted[Math.floor(sorted.length / 2)];
 }
 
-const selectors = await loadProductionSelectors();
-const expected = 5;
-const actual = observe(selectors);
+const selectors = await loadProductionModules();
+const responseStarted = createResponseStartedCheck(selectors);
+const expected = 4;
+const actual = observe(selectors, responseStarted);
 if (actual !== expected) {
   throw new Error(`Observation produced ${actual}; expected ${expected}.`);
 }
 
-let checksum = runIterations(selectors, WARMUP_ITERATIONS);
+let checksum = runIterations(selectors, responseStarted, WARMUP_ITERATIONS);
 const samples = [];
 for (let sample = 0; sample < SAMPLES; sample += 1) {
   globalThis.gc?.();
   const startedAt = process.hrtime.bigint();
-  checksum += runIterations(selectors, ITERATIONS);
+  checksum += runIterations(selectors, responseStarted, ITERATIONS);
   const elapsedNanoseconds = Number(process.hrtime.bigint() - startedAt);
   samples.push(elapsedNanoseconds / ITERATIONS);
 }
@@ -149,7 +171,7 @@ console.log(
   `${WARMUP_ITERATIONS.toLocaleString("en-US")} warmup observations.`
 );
 console.table([{
-  scenario: "assistant-and-composer-ready",
+  scenario: "streaming-after-response-start",
   medianNanosecondsPerObservation: Math.round(medianNanoseconds),
   minimumNanosecondsPerObservation: Math.round(Math.min(...samples)),
   observationsPerSecond: Math.round(1_000_000_000 / medianNanoseconds)

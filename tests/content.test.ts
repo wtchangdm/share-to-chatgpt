@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   composerHasPrompt,
+  createAssistantResponseTracker,
   insertPrompt,
   isPersistedConversationPath,
   runDispatch,
@@ -166,6 +167,33 @@ function claimedDispatch(overrides: Partial<DispatchPayload> = {}): DispatchPayl
     ...overrides
   };
 }
+
+test("assistant response detection stops rescanning after a response starts", () => {
+  let assistantMessageCount = 4;
+  let scanCount = 0;
+  const responseStarted = createAssistantResponseTracker(assistantMessageCount, () => {
+    scanCount += 1;
+    return assistantMessageCount;
+  });
+
+  assert.equal(responseStarted(), false);
+  assert.equal(responseStarted(), false);
+  assistantMessageCount += 1;
+  assert.equal(responseStarted(), true);
+  assert.equal(responseStarted(), true);
+  assert.equal(responseStarted(), true);
+  assert.equal(scanCount, 3);
+
+  const nextResponseStarted = createAssistantResponseTracker(
+    assistantMessageCount,
+    () => {
+      scanCount += 1;
+      return assistantMessageCount;
+    }
+  );
+  assert.equal(nextResponseStarted(), false);
+  assert.equal(scanCount, 4);
+});
 
 test("only canonical UUID conversation paths count as persisted", () => {
   assert.equal(isPersistedConversationPath(
