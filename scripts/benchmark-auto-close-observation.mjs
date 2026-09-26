@@ -4,6 +4,7 @@ const ITERATIONS = 200_000;
 const SAMPLES = 7;
 const WARMUP_ITERATIONS = 20_000;
 const BASELINE_ASSISTANT_MESSAGES = 200;
+let productionSelectors;
 
 class FakeHTMLElement {
   isContentEditable = false;
@@ -25,10 +26,10 @@ class FakeHTMLFormElement extends FakeHTMLElement {
   }
 
   querySelector(selector) {
-    if (selector === 'button[data-testid="send-button"]') {
+    if (selector === productionSelectors.SEND_BUTTON_SELECTORS[0]) {
       return this.sendButton;
     }
-    if (selector === 'button[data-testid="stop-button"]') {
+    if (selector === productionSelectors.RESPONSE_STOP_BUTTON_SELECTOR) {
       return this.stopButton;
     }
     return null;
@@ -55,21 +56,32 @@ const button = new FakeHTMLButtonElement();
 const stopButton = new FakeHTMLButtonElement();
 const form = new FakeHTMLFormElement(button, stopButton);
 const composer = new FakeHTMLTextAreaElement(form);
+function assistantMarkdown(textContent) {
+  const message = {};
+  return {
+    textContent,
+    closest() {
+      return message;
+    }
+  };
+}
+
 const assistantMessages = Array.from(
   { length: BASELINE_ASSISTANT_MESSAGES },
-  (_, index) => ({ textContent: `Earlier response ${index}` })
+  (_, index) => assistantMarkdown(`Earlier response ${index}`)
 );
 assistantMessages.push(
-  { textContent: " " },
-  { textContent: "Current response" }
+  assistantMarkdown(" "),
+  assistantMarkdown("Current response")
 );
+let assistantSelector;
 
 globalThis.document = {
-  querySelector(selector) {
-    return selector === "#prompt-textarea" ? composer : null;
+  querySelector() {
+    return composer;
   },
   querySelectorAll(selector) {
-    return selector === '[data-message-author-role="assistant"]'
+    return selector === assistantSelector
       ? assistantMessages
       : [];
   }
@@ -101,14 +113,11 @@ async function loadProductionModules() {
   return import(moduleUrl);
 }
 
-function createResponseStartedCheck(production) {
-  const readAssistantCount = () => production.countStartedAssistantMessages();
-  return typeof production.content.createAssistantResponseTracker === "function"
-    ? production.content.createAssistantResponseTracker(
-      BASELINE_ASSISTANT_MESSAGES,
-      readAssistantCount
-    )
-    : () => readAssistantCount() > BASELINE_ASSISTANT_MESSAGES;
+function createResponseStartedCheck(production, initialMessageCount) {
+  return production.content.createAssistantResponseTracker(
+    initialMessageCount,
+    () => production.countStartedAssistantMessages()
+  );
 }
 
 function observe(selectors, responseStarted) {
@@ -120,11 +129,9 @@ function observe(selectors, responseStarted) {
   const sendButtonEnabled = sendButton
     ? selectors.isSendButtonEnabled(sendButton)
     : false;
-  const composerForm = currentComposer
-    ? selectors.findComposerForm(currentComposer)
-    : null;
-  const responseStreaming = composerForm
-    ?.querySelector('button[data-testid="stop-button"]') === stopButton;
+  const responseStreaming = currentComposer
+    ? selectors.findResponseStopButton(currentComposer) === stopButton
+    : false;
   return Number(assistantResponseStarted) + Number(currentComposer === composer) +
     Number(sendButtonEnabled) + Number(responseStreaming);
 }
@@ -143,36 +150,44 @@ function median(values) {
 }
 
 const selectors = await loadProductionModules();
-const responseStarted = createResponseStartedCheck(selectors);
-const expected = 4;
-const actual = observe(selectors, responseStarted);
-if (actual !== expected) {
-  throw new Error(`Observation produced ${actual}; expected ${expected}.`);
-}
+productionSelectors = selectors;
+assistantSelector = selectors.ASSISTANT_MESSAGE_SELECTOR;
+const results = [];
+for (const scenario of [
+  { name: "streaming-after-response-start", initialCount: BASELINE_ASSISTANT_MESSAGES, expected: 4 },
+  { name: "awaiting-response-start", initialCount: BASELINE_ASSISTANT_MESSAGES + 1, expected: 3 }
+]) {
+  const responseStarted = createResponseStartedCheck(selectors, scenario.initialCount);
+  const actual = observe(selectors, responseStarted);
+  if (actual !== scenario.expected) {
+    throw new Error(`Observation produced ${actual}; expected ${scenario.expected}.`);
+  }
 
-let checksum = runIterations(selectors, responseStarted, WARMUP_ITERATIONS);
-const samples = [];
-for (let sample = 0; sample < SAMPLES; sample += 1) {
-  globalThis.gc?.();
-  const startedAt = process.hrtime.bigint();
-  checksum += runIterations(selectors, responseStarted, ITERATIONS);
-  const elapsedNanoseconds = Number(process.hrtime.bigint() - startedAt);
-  samples.push(elapsedNanoseconds / ITERATIONS);
-}
+  let checksum = runIterations(selectors, responseStarted, WARMUP_ITERATIONS);
+  const samples = [];
+  for (let sample = 0; sample < SAMPLES; sample += 1) {
+    globalThis.gc?.();
+    const startedAt = process.hrtime.bigint();
+    checksum += runIterations(selectors, responseStarted, ITERATIONS);
+    const elapsedNanoseconds = Number(process.hrtime.bigint() - startedAt);
+    samples.push(elapsedNanoseconds / ITERATIONS);
+  }
 
-if (checksum === 0) {
-  throw new Error("Benchmark checksum was unexpectedly zero.");
-}
+  if (checksum !== scenario.expected * (WARMUP_ITERATIONS + SAMPLES * ITERATIONS)) {
+    throw new Error("Benchmark checksum did not match the expected observations.");
+  }
 
-const medianNanoseconds = median(samples);
+  const medianNanoseconds = median(samples);
+  results.push({
+    scenario: scenario.name,
+    medianNanosecondsPerObservation: Math.round(medianNanoseconds),
+    minimumNanosecondsPerObservation: Math.round(Math.min(...samples)),
+    observationsPerSecond: Math.round(1_000_000_000 / medianNanoseconds)
+  });
+}
 console.log(`Node ${process.version} on ${process.platform}/${process.arch}`);
 console.log(
   `${SAMPLES} samples × ${ITERATIONS.toLocaleString("en-US")} measured observations; ` +
   `${WARMUP_ITERATIONS.toLocaleString("en-US")} warmup observations.`
 );
-console.table([{
-  scenario: "streaming-after-response-start",
-  medianNanosecondsPerObservation: Math.round(medianNanoseconds),
-  minimumNanosecondsPerObservation: Math.round(Math.min(...samples)),
-  observationsPerSecond: Math.round(1_000_000_000 / medianNanoseconds)
-}]);
+console.table(results);

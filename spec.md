@@ -26,7 +26,7 @@ https://chatgpt.com/?prompt=<encoded cleaned target URL>
 4. Keep the original tab active.
 5. Verify or inject the prompt in the ChatGPT composer.
 6. Submit when automatic submission is enabled.
-7. Optionally close the ChatGPT tab after the temporary `/c/WEB:<UUID>` path changes to a canonical `/c/<UUID>` conversation path and either the form-scoped Stop button or a new non-empty assistant message indicates that a response started. If no canonical path is observed, completed streaming is the fail-safe fallback.
+7. Optionally close the ChatGPT tab after the temporary conversation path changes to a canonical `/c/<UUID>` path and either an enabled form-scoped Stop button or new non-empty assistant markdown indicates that a response started. If no canonical path is observed, completed streaming is the fail-safe fallback.
 
 ### Link context menu
 
@@ -140,7 +140,7 @@ The source tab's extension action shows a blue `…` while its latest dispatch i
 
 ## Readiness and time bounds
 
-ChatGPT is treated as a client-rendered application. Readiness uses `MutationObserver` plus bounded 250 ms fallback polling; it does not rely on a fixed page-load sleep.
+Readiness uses `MutationObserver` on `main` (the document until `main` exists), rebinding if React replaces the root. It observes child/text changes and `disabled`, `aria-disabled`, `contenteditable`, `aria-label`, `type`, and `data-markdown-text-style`, including in-place Send-to-Stop changes. Bounded 250 ms polling covers URL-only changes and missed events; no fixed page-load sleep is used. Success, timeout, and reader failure all release observers and timers.
 
 A pending or claimed dispatch expires approximately 15 seconds after creation. Arming an auto-close dispatch extends its expiry to approximately 120 seconds from that transition; other armed dispatches retain the original expiry. Expiration is checked on every dispatch message, at service-worker startup, and opportunistically before a new dispatch. Service-worker timers provide prompt cleanup while the worker remains active; correctness does not depend on exact timer delivery.
 
@@ -155,40 +155,43 @@ Current bounded phases are:
 
 All ChatGPT selector logic is isolated in `src/selectors.ts`.
 
+### Current-frontend compatibility policy
+
+Target the currently observed frontend. Replace obsolete selectors, logic, tests, and documentation rather than retaining legacy branches or aliases. These selector listings describe today's integration, not a historical compatibility requirement. Keep fallbacks only for demonstrated current interactions or documented safety/recovery needs.
+
+Preserve supported interactions, exact prompt verification, one-way dispatch, time bounds, privacy, and fail-closed behavior. Verify changes in a [live debug session](AGENTS.md#live-chatgpt-troubleshooting), including streaming and reopening early-closed conversations.
+
 ### Composer
 
 Priority:
 
-1. `#prompt-textarea`
-2. Form-scoped `contenteditable="true"` with `role="textbox"`
-3. Form-scoped prompt textarea
-4. Narrow form-scoped textarea fallbacks
+1. `main form[data-chatgpt-composer] [data-composer-markdown][contenteditable="true"][role="textbox"]`
+2. `main form [contenteditable="true"][role="textbox"]`
+3. `main form textarea[name="prompt"]`
+
+All candidates stay inside a main-content form; no historical ID or page-wide form matching.
 
 ### Send button
 
-Selection is restricted to the composer's form. Priority:
-
-1. `button[data-testid="send-button"]`
-2. Exact `aria-label="Send prompt"`
-3. Exact `aria-label="Send message"`
-4. `button[type="submit"]`
-
-The extension never searches the entire page for a button whose visible text merely contains “Send”.
+Use an enabled `button[type="submit"]` inside the composer's form, respecting `disabled` and `aria-disabled`. Do not depend on localized labels, historical test IDs, or page-wide “Send” text matching.
 
 ### Assistant response
 
-Auto-close uses two narrow DOM markers and one narrow path pattern:
+Response markers:
 
 ```css
-[data-message-author-role="assistant"]
-button[data-testid="stop-button"] /* restricted to the composer's form */
+main [data-chatgpt-conversation-selection-target] [data-turn-key] [data-markdown-text-style="assistant-message"]
+button[type="button"][aria-label="Stop"] /* restricted to the composer's form */
 ```
 
-```text
-/c/<UUID>
-```
+Count each turn with non-empty assistant markdown once. User text, toolbar labels, empty placeholders, and turn existence alone do not qualify. Do not require finalized message IDs: the observed UI adds them only after streaming ends.
 
-Either a form-scoped Stop button or a higher count of non-empty assistant-message markers establishes that a new response started. The observed ChatGPT flow first uses `/c/WEB:<UUID>` and then replaces it with canonical `/c/<UUID>` after assigning the conversation. Auto-close accepts only a UUID-shaped canonical path; unrelated and temporary paths fail closed. Once both the canonical path and either response-start marker exist, the tab may close immediately while the Stop button is still present and before assistant text appears. If the canonical path is not observed, an observed Stop-button present-to-absent transition plus a new assistant message provides the slower response-completion fallback. The extension does not inspect or store the assistant response text.
+Only UUID-shaped `/c/<UUID>` paths count as persistence evidence. Temporary paths such as the observed `/c/local-chatgpt%3A<UUID>` and unrelated paths do not. With the composer observable, close when either condition holds:
+
+- **Canonical path:** an enabled scoped Stop exists, or the non-empty assistant-turn count increases. The Stop fast path skips text scans; the count path also works when Stop is unrecognized.
+- **No canonical path:** an observed enabled Stop disappears and a new non-empty assistant turn exists. A disabled but present Stop is not disappearance.
+
+Otherwise leave the tab open at timeout. Latch non-empty response detection per dispatch; never retain response text. These UI signals do not guarantee server persistence or continued generation. Live validation must reopen the exact early-closed conversation and verify a non-empty response.
 
 ## Prompt insertion
 
@@ -212,6 +215,8 @@ Immediately before submission, the content script rechecks that:
 4. The Send button is enabled.
 5. The dispatch was successfully armed by the service worker.
 
+After the asynchronous arming reply, the script reacquires the composer and enabled Send control and verifies the exact prompt again. A change at that boundary fails closed without submitting, retrying, or arming a second time.
+
 Submission uses:
 
 ```js
@@ -222,7 +227,7 @@ form.requestSubmit(button);
 
 Submission is confirmed when the composer remains observable and either no longer contains the expected prompt or its Send button becomes disabled. A temporarily missing composer is treated as uncertainty and does not confirm submission.
 
-When `autoClose` is enabled, the content script records the number of non-empty assistant messages before submitting, checks for a canonical UUID conversation path, and observes the composer's form for the exact `button[data-testid="stop-button"]` streaming control. It asks the service worker to close the target tab with `chrome.tabs.remove` as soon as a canonical path exists together with either the Stop button or an increased assistant-message count; it does not wait for assistant text or the full response when the Stop button is available. If no canonical path is observed, it closes only after the Stop button has been observed and then disappears and the assistant-message count increases. If neither condition can be verified before the bounded timeout, the submitted tab remains open.
+With `autoClose` enabled, record the non-empty assistant-turn count before submission and follow the [response-signal policy](#assistant-response). On success, ask the service worker to close the target using `chrome.tabs.remove`; on timeout, leave it open. Skip response scans on the Stop fast path, while a temporary-path response is streaming, and entirely when auto-close is disabled.
 
 ## Failure behavior
 
@@ -281,7 +286,10 @@ Run the cases relevant to a change and report which cases were verified in the c
 - Log out of ChatGPT or block the composer, dispatch again, and confirm no prompt is submitted, the tab remains open, and a red `!` badge or error appears.
 - Open an unrelated ChatGPT tab and confirm it does not auto-submit anything.
 - Disable automatic submission and confirm the correct prompt is prefilled but not submitted.
-- Enable automatic closing and confirm the background tab remains open on `/c/WEB:<UUID>`, then closes after a canonical `/c/<UUID>` path appears while the form-scoped Stop button is present, without waiting for assistant text or the full response.
+- Enable automatic closing and confirm the background tab remains open on temporary paths such as `/c/local-chatgpt%3A<UUID>`, then closes after a canonical `/c/<UUID>` path appears while the enabled form-scoped Stop button is present, without waiting for assistant text or the full response. Reopen that exact conversation and verify it loads with a non-empty response.
+- On the observed ChatGPT UI with a form-scoped contenteditable textbox and no composer ID, confirm one submission and automatic closing after a canonical `/c/<UUID>` path and new non-empty assistant markdown appear, even without a recognized Stop button or finalized message IDs.
+- Repeat with no deep-link prefill and confirm fallback insertion is recognized by ChatGPT, submitted once, and followed by early closing and successful reopening.
+- Confirm user text and empty assistant placeholders do not trigger closing; temporary conversation paths without a verified streaming-completion transition remain open.
 - Reload the extension and confirm automation settings retain their saved values.
 
 ## Inherently fragile behavior

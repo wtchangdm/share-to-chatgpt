@@ -54,7 +54,7 @@ Reload the extension from `chrome://extensions` after rebuilding it.
 | Optional text | Empty | Added before or after the URL. Line breaks are normalized to spaces. |
 | Remove common tracking parameters from shared URLs | On | Removes the known parameters listed below while preserving other query parameters and fragments. |
 | Automatically submit the prompt | On | Turn off to prefill the composer without submitting. |
-| Close the ChatGPT tab after ChatGPT assigns a conversation URL and starts responding | Off | Closes after a canonical `/c/<UUID>` URL appears together with either ChatGPT's form-scoped Stop button or a new non-empty assistant message. If the canonical URL is unavailable, response completion is the fallback. Waits up to approximately two minutes. Requires automatic submission. |
+| Close the ChatGPT tab after ChatGPT assigns a conversation URL and starts responding | Off | Closes after a canonical `/c/<UUID>` URL appears together with either ChatGPT's enabled form-scoped Stop button or a new non-empty assistant response. Does not wait for the full answer. If the canonical URL is unavailable, response completion is the fallback. Waits up to approximately two minutes. Requires automatic submission. |
 
 With link cleanup enabled, the extension removes these exact, case-sensitive parameter names from HTTP and HTTPS URLs:
 
@@ -64,6 +64,19 @@ With link cleanup enabled, the extension removes these exact, case-sensitive par
 - Mailchimp campaign, recipient, and product-recommendation identifiers: `mc_cid`, `mc_eid`, and `mc_tc`.
 
 The conservative list, exact cleanup contract, and provider sources are documented in [spec.md](spec.md#tracking-parameter-cleanup). Signed or single-use links can cover the complete query string with an integrity check; turn cleanup off if removing a listed parameter makes a link unusable.
+
+## Troubleshooting with a live debug session
+
+Debugging your existing signed-in profile requires **Chrome 144+**; the extension itself requires Chrome 120+.
+
+1. In the affected profile, open `chrome://inspect/#remote-debugging` and enable **Allow remote debugging**.
+2. Identify the ChatGPT tab and authorize any new test conversations.
+3. Approve Chrome's **Allow** prompt when the debugger connects. Login state and extensions are reused; no cookie export or profile copy is needed.
+4. Disable remote debugging afterward.
+
+Access covers the whole profile: use only a trusted debugger and agreed tabs/tests. If the option is missing, check `chrome://version`. Do not substitute `--remote-debugging-port` on your everyday profile; Chrome 136+ restricts it for the default data directory.
+
+See [Chrome's documentation](https://developer.chrome.com/docs/devtools/agents/use-cases/auto-connect) and the [debugging workflow](AGENTS.md#live-chatgpt-troubleshooting). Report the actual extension error message, not just its `content.js` source listing.
 
 ## Development
 
@@ -87,4 +100,8 @@ Generated scripts are written to `dist/`; do not edit them directly.
 
 Settings and dispatch state stay in local Chrome extension storage. The constructed prompt—including the page or link URL—is sent only to `chatgpt.com` through normal page navigation and is not sent to any other service. The shortcut inspects the active page only when pressed, using Chrome's temporary `activeTab` access; the extension has no persistent all-sites access.
 
-ChatGPT's DOM and deep-link behavior are not public APIs. The shortcut supports hovered links in normal document content and open Shadow DOM, but intentionally cannot inspect closed Shadow DOM or child frames. The extension leaves the tab open and refuses to submit when it cannot verify the expected prompt or required controls. The source tab shows a blue `…` while a dispatch is active and a brief green `✓` after completion. A failed dispatch shows a red `!`; hover the extension action for a data-safe failure category, with technical details kept in the local extension console. Status belongs to the latest dispatch from a source tab and is reset on navigation.
+Only the currently observed ChatGPT frontend is supported; its DOM and deep links are not public APIs. Hovered links work in normal content and open Shadow DOM, not closed Shadow DOM or child frames.
+
+Unverified prompts or controls prevent submission; unverified closing conditions leave the tab open. Early closing uses ChatGPT's visible URL and response controls but cannot guarantee continued generation. Disable it if the tab must stay open until the full answer finishes.
+
+The source tab shows blue `…` during dispatch, brief green `✓` on completion, or red `!` on failure. Hover the action for a data-safe failure category; technical details stay in the local extension console. Status belongs to the latest dispatch and resets on navigation.

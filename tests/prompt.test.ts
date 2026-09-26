@@ -211,11 +211,13 @@ test("a transient dispatch marker is added without changing the prompt query", (
 test("automatic closing uses narrow response-state markers", () => {
   assert.equal(
     ASSISTANT_MESSAGE_SELECTOR,
-    '[data-message-author-role="assistant"]'
+    'main [data-chatgpt-conversation-selection-target] ' +
+      '[data-turn-key] ' +
+      '[data-markdown-text-style="assistant-message"]'
   );
   assert.equal(
     RESPONSE_STOP_BUTTON_SELECTOR,
-    'button[data-testid="stop-button"]'
+    'button[type="button"][aria-label="Stop"]'
   );
 });
 
@@ -339,13 +341,8 @@ test("the shortcut uses the current page URL when no link is hovered", () => {
   }
 });
 
-test("exact Send controls take priority over a generic submit button", () => {
-  assert.deepEqual(SEND_BUTTON_SELECTORS, [
-    'button[data-testid="send-button"]',
-    'button[aria-label="Send prompt"]',
-    'button[aria-label="Send message"]',
-    'button[type="submit"]'
-  ]);
+test("Send uses the observed composer form's native submit control", () => {
+  assert.deepEqual(SEND_BUTTON_SELECTORS, ['button[type="submit"]']);
 });
 
 function pendingDispatch(overrides: Partial<DispatchPayload> = {}): DispatchPayload {

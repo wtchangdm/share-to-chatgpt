@@ -3,12 +3,32 @@ import test from "node:test";
 import {
   composerHasPrompt,
   createAssistantResponseTracker,
+  createAutoCloseCheck,
   insertPrompt,
   isPersistedConversationPath,
   runDispatch,
   takeDispatchId
 } from "../src/content";
+import { countStartedAssistantMessages } from "../src/selectors";
 import type { DispatchPayload, DispatchResponse } from "../src/types";
+
+const modernAssistantSelector = 'main [data-chatgpt-conversation-selection-target] ' +
+  '[data-turn-key] ' +
+  '[data-markdown-text-style="assistant-message"]';
+
+class FakeAssistantMarkdown {
+  constructor(
+    public textContent: string,
+    private readonly turn: object = {}
+  ) {}
+
+  closest(selector: string): object | null {
+    if (selector === '[data-turn-key]') {
+      return this.turn;
+    }
+    return null;
+  }
+}
 
 const prompt = "Summarize https://example.com/article?item=42";
 
@@ -16,7 +36,8 @@ interface InstalledDom {
   textarea: FakeTextarea;
   button: FakeButton;
   form: FakeForm;
-  assistantMessages: Array<{ textContent: string }>;
+  assistantMessages: FakeAssistantMarkdown[];
+  readonly assistantScans: number;
   setPathname(pathname: string): void;
   restore(): void;
 }
@@ -46,12 +67,15 @@ class FakeForm {
   onSubmit: (() => void) | undefined;
   sendButtonAvailable = true;
   stopButtonAvailable = false;
+  readonly stopButton = new FakeButton();
 
   querySelector(selector: string): FakeButton | null {
-    if (selector === 'button[data-testid="stop-button"]') {
-      return this.stopButtonAvailable ? this.button : null;
+    if (selector === 'button[type="button"][aria-label="Stop"]') {
+      return this.stopButtonAvailable ? this.stopButton : null;
     }
-    return this.sendButtonAvailable ? this.button : null;
+    return selector === 'button[type="submit"]' && this.sendButtonAvailable
+      ? this.button
+      : null;
   }
 
   constructor(private readonly button: FakeButton) {}
@@ -100,8 +124,9 @@ function installDom(): InstalledDom {
   const button = new FakeButton();
   const form = new FakeForm(button);
   const textarea = new FakeTextarea(form);
-  const assistantMessages: Array<{ textContent: string }> = [];
-  let pathname = "/c/WEB:b7811973-aee5-448a-97fb-9af93b1786f8";
+  const assistantMessages: FakeAssistantMarkdown[] = [];
+  let pathname = "/c/local-chatgpt%3Ab7811973-aee5-448a-97fb-9af93b1786f8";
+  let assistantScans = 0;
 
   setGlobal("HTMLTextAreaElement", FakeTextarea);
   setGlobal("HTMLButtonElement", FakeButton);
@@ -114,10 +139,11 @@ function installDom(): InstalledDom {
   });
   setGlobal("document", {
     querySelector(selector: string) {
-      return selector === "#prompt-textarea" ? textarea : null;
+      return selector === 'main form textarea[name="prompt"]' ? textarea : null;
     },
     querySelectorAll(selector: string) {
-      return selector === '[data-message-author-role="assistant"]'
+      assistantScans += 1;
+      return selector === modernAssistantSelector
         ? assistantMessages
         : [];
     }
@@ -137,6 +163,9 @@ function installDom(): InstalledDom {
     button,
     form,
     assistantMessages,
+    get assistantScans() {
+      return assistantScans;
+    },
     setPathname(updatedPathname: string) {
       pathname = updatedPathname;
     },
@@ -168,6 +197,29 @@ function claimedDispatch(overrides: Partial<DispatchPayload> = {}): DispatchPayl
   };
 }
 
+test("streaming assistant markdown counts non-empty turns without finalized message IDs", () => {
+  const dom = installDom();
+  try {
+    const message = {};
+    dom.assistantMessages.push(
+      new FakeAssistantMarkdown("Earlier response"),
+      new FakeAssistantMarkdown(" \n "),
+      new FakeAssistantMarkdown("First block", message),
+      new FakeAssistantMarkdown("Second block", message)
+    );
+    assert.equal(countStartedAssistantMessages(), 2);
+
+    dom.assistantMessages.push(new FakeAssistantMarkdown("Next response"));
+    assert.equal(countStartedAssistantMessages(), 3);
+    assert.equal(countStartedAssistantMessages(), 3);
+
+    dom.assistantMessages.length = 0;
+    assert.equal(countStartedAssistantMessages(), 0);
+  } finally {
+    dom.restore();
+  }
+});
+
 test("assistant response detection stops rescanning after a response starts", () => {
   let assistantMessageCount = 4;
   let scanCount = 0;
@@ -195,12 +247,48 @@ test("assistant response detection stops rescanning after a response starts", ()
   assert.equal(scanCount, 4);
 });
 
+test("auto-close verifies streaming completion on temporary paths and resets for each dispatch", () => {
+  const dom = installDom();
+  try {
+    const check = createAutoCloseCheck(0);
+    assert.equal(check(), null);
+    dom.form.stopButtonAvailable = true;
+    assert.equal(check(), null);
+    dom.assistantMessages.push(new FakeAssistantMarkdown("Synthetic response"));
+    assert.equal(check(), null);
+    assert.equal(dom.assistantScans, 0, "temporary streaming does not rescan response text");
+    dom.form.stopButton.disabled = true;
+    assert.equal(check(), null, "a disabled but present Stop does not mean streaming completed");
+    dom.form.stopButtonAvailable = false;
+    assert.equal(check(), true);
+    assert.equal(check(), true);
+    assert.equal(dom.assistantScans, 1);
+    assert.equal(createAutoCloseCheck(1)(), null, "streaming evidence is per dispatch");
+  } finally { dom.restore(); }
+});
+
+test("a disabled Stop control is not proof that a response started", () => {
+  const dom = installDom();
+  try {
+    dom.setPathname("/c/6a76e003-92b8-83e8-90ef-22ce9ea8e8a3");
+    dom.form.stopButtonAvailable = true;
+    dom.form.stopButton.disabled = true;
+    const check = createAutoCloseCheck(0);
+    assert.equal(check(), null);
+    dom.form.stopButton.disabled = false;
+    assert.equal(check(), true);
+  } finally { dom.restore(); }
+});
+
 test("only canonical UUID conversation paths count as persisted", () => {
   assert.equal(isPersistedConversationPath(
     "/c/6a76e003-92b8-83e8-90ef-22ce9ea8e8a3"
   ), true);
   assert.equal(isPersistedConversationPath(
     "/c/WEB:b7811973-aee5-448a-97fb-9af93b1786f8"
+  ), false);
+  assert.equal(isPersistedConversationPath(
+    "/c/local-chatgpt%3Ab7811973-aee5-448a-97fb-9af93b1786f8"
   ), false);
   assert.equal(isPersistedConversationPath("/c/not-a-conversation-id"), false);
   assert.equal(isPersistedConversationPath("/"), false);
@@ -275,7 +363,7 @@ test("an incomplete assistant response leaves the submitted tab open", async () 
     dom.button.disabled = true;
     dom.form.sendButtonAvailable = false;
     dom.form.stopButtonAvailable = true;
-    dom.assistantMessages.push({ textContent: "Response still streaming" });
+    dom.assistantMessages.push(new FakeAssistantMarkdown("Response still streaming"));
   };
 
   const originalChrome = globalThis.chrome;
@@ -312,6 +400,109 @@ test("an incomplete assistant response leaves the submitted tab open", async () 
     dom.restore();
   }
 });
+
+for (const change of ["prompt", "send-button"] as const) {
+  test(`arming cannot submit after the ${change} changes`, async () => {
+    const dom = installDom();
+    const messages: string[] = [];
+    const dispatch = claimedDispatch({ expiresAt: Date.now() + 800, autoClose: false });
+    dom.textarea.value = prompt;
+    const originalChrome = globalThis.chrome;
+    Object.defineProperty(globalThis, "chrome", {
+      configurable: true,
+      value: {
+        runtime: {
+          async sendMessage(message: { type: string }): Promise<DispatchResponse> {
+            messages.push(message.type);
+            if (message.type === "claim-dispatch") return { ok: true, dispatch };
+            if (message.type === "arm-dispatch") {
+              if (change === "prompt") dom.textarea.value = "Changed during arming";
+              else dom.button.disabled = true;
+            }
+            return { ok: true };
+          }
+        }
+      }
+    });
+    try {
+      await runDispatch(dispatch.id);
+      assert.deepEqual(dom.form.submittedButtons, []);
+      assert.equal(dom.button.clickCount, 0);
+      assert.deepEqual(messages, ["claim-dispatch", "arm-dispatch", "fail-dispatch"]);
+    } finally {
+      Object.defineProperty(globalThis, "chrome", { configurable: true, value: originalChrome });
+      dom.restore();
+    }
+  });
+}
+
+for (const scenario of [
+  { name: "new response", canonical: true, response: "Answer", autoClose: true, closes: true },
+  { name: "empty response", canonical: true, response: " \n ", autoClose: true, closes: false },
+  { name: "only earlier responses", canonical: true, response: null, autoClose: true, closes: false },
+  { name: "temporary path", canonical: false, response: "Answer", autoClose: true, closes: false },
+  { name: "auto-close disabled", canonical: true, response: "Answer", autoClose: false, closes: false }
+]) {
+  test(`assistant markdown without a Stop button: ${scenario.name}`, async () => {
+    const dom = installDom();
+    const messages: string[] = [];
+    const closeRequests: boolean[] = [];
+    const dispatch = claimedDispatch({
+      expiresAt: Date.now() + 1_100,
+      autoClose: scenario.autoClose
+    });
+    dom.textarea.value = prompt;
+    dom.assistantMessages.push(new FakeAssistantMarkdown("Earlier response"));
+    dom.form.onSubmit = () => {
+      dom.textarea.value = "";
+      dom.form.sendButtonAvailable = false;
+      if (scenario.canonical) {
+        dom.setPathname("/c/6a76e003-92b8-83e8-90ef-22ce9ea8e8a3");
+      }
+      if (scenario.response !== null) {
+        dom.assistantMessages.push(new FakeAssistantMarkdown(scenario.response));
+      }
+    };
+    const originalChrome = globalThis.chrome;
+    Object.defineProperty(globalThis, "chrome", {
+      configurable: true,
+      value: {
+        runtime: {
+          async sendMessage(message: {
+            type: string;
+            closeTab?: boolean;
+          }): Promise<DispatchResponse> {
+            messages.push(message.type);
+            if (message.type === "claim-dispatch") {
+              return { ok: true, dispatch };
+            }
+            if (message.type === "complete-dispatch") {
+              closeRequests.push(message.closeTab === true);
+            }
+            return { ok: true };
+          }
+        }
+      }
+    });
+
+    try {
+      await runDispatch(dispatch.id);
+      assert.deepEqual(messages, ["claim-dispatch", "arm-dispatch", "complete-dispatch"]);
+      assert.deepEqual(dom.form.submittedButtons, [dom.button]);
+      assert.equal(dom.button.clickCount, 0);
+      assert.deepEqual(closeRequests, [scenario.closes]);
+      if (!scenario.autoClose) {
+        assert.equal(dom.assistantScans, 0);
+      }
+    } finally {
+      Object.defineProperty(globalThis, "chrome", {
+        configurable: true,
+        value: originalChrome
+      });
+      dom.restore();
+    }
+  });
+}
 
 test("a canonical conversation closes as soon as the response starts", async () => {
   const dom = installDom();
@@ -370,6 +561,7 @@ test("a canonical conversation closes as soon as the response starts", async () 
     assert.deepEqual(dom.form.submittedButtons, [dom.button]);
     assert.equal(dom.button.clickCount, 0);
     assert.deepEqual(closeRequests, [true]);
+    assert.equal(dom.assistantScans, 1, "only the pre-submit baseline is scanned on the Stop fast path");
     assert.deepEqual(statesAtCompletion, [{
       pathname: "/c/6a76e003-92b8-83e8-90ef-22ce9ea8e8a3",
       stopAvailable: true

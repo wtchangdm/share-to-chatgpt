@@ -1,41 +1,33 @@
 export type ComposerElement = HTMLTextAreaElement | HTMLElement;
 
-export const ASSISTANT_MESSAGE_SELECTOR = '[data-message-author-role="assistant"]';
-export const RESPONSE_STOP_BUTTON_SELECTOR = 'button[data-testid="stop-button"]';
-
-export const SEND_BUTTON_SELECTORS = [
-  'button[data-testid="send-button"]',
-  'button[aria-label="Send prompt"]',
-  'button[aria-label="Send message"]',
-  'button[type="submit"]'
+const COMPOSER_SELECTORS = [
+  'main form[data-chatgpt-composer] [data-composer-markdown][contenteditable="true"][role="textbox"]',
+  'main form [contenteditable="true"][role="textbox"]',
+  'main form textarea[name="prompt"]'
 ] as const;
+const TURN_SELECTOR = '[data-turn-key]';
+export const ASSISTANT_MESSAGE_SELECTOR =
+  'main [data-chatgpt-conversation-selection-target] ' +
+  `${TURN_SELECTOR} [data-markdown-text-style="assistant-message"]`;
+export const RESPONSE_STOP_BUTTON_SELECTOR = 'button[type="button"][aria-label="Stop"]';
+export const SEND_BUTTON_SELECTORS = ['button[type="submit"]'] as const;
+export const OBSERVED_ATTRIBUTES = [
+  "disabled", "aria-disabled", "contenteditable", "aria-label", "type",
+  "data-markdown-text-style"
+];
 
-function isComposerElement(element: Element | null): element is ComposerElement {
-  return element instanceof HTMLTextAreaElement ||
-    (element instanceof HTMLElement && element.isContentEditable);
+export function findObservationRoot(): Node {
+  return document.querySelector("main") ?? document;
 }
 
 export function findComposer(): ComposerElement | null {
-  const primary = document.querySelector("#prompt-textarea");
-  if (isComposerElement(primary)) {
-    return primary;
-  }
-
-  const fallbacks = [
-    'main form [contenteditable="true"][role="textbox"]',
-    'main form textarea[name="prompt"]',
-    'main form textarea',
-    'form [contenteditable="true"][role="textbox"]',
-    'form textarea[name="prompt"]'
-  ];
-
-  for (const selector of fallbacks) {
-    const candidate = document.querySelector(selector);
-    if (isComposerElement(candidate)) {
-      return candidate;
+  for (const selector of COMPOSER_SELECTORS) {
+    const element = document.querySelector(selector);
+    if (element instanceof HTMLTextAreaElement ||
+      (element instanceof HTMLElement && element.isContentEditable)) {
+      return element;
     }
   }
-
   return null;
 }
 
@@ -45,30 +37,13 @@ export function findComposerForm(composer: ComposerElement): HTMLFormElement | n
 }
 
 export function findSendButton(composer: ComposerElement): HTMLButtonElement | null {
-  const form = findComposerForm(composer);
-  if (!form) {
-    return null;
-  }
-
-  for (const selector of SEND_BUTTON_SELECTORS) {
-    const candidate = form.querySelector(selector);
-    if (candidate instanceof HTMLButtonElement) {
-      return candidate;
-    }
-  }
-
-  return null;
+  const button = findComposerForm(composer)?.querySelector(SEND_BUTTON_SELECTORS[0]);
+  return button instanceof HTMLButtonElement ? button : null;
 }
 
-export function findResponseStopButton(
-  composer: ComposerElement
-): HTMLButtonElement | null {
-  const form = findComposerForm(composer);
-  if (!form) {
-    return null;
-  }
-  const candidate = form.querySelector(RESPONSE_STOP_BUTTON_SELECTOR);
-  return candidate instanceof HTMLButtonElement ? candidate : null;
+export function findResponseStopButton(composer: ComposerElement): HTMLButtonElement | null {
+  const button = findComposerForm(composer)?.querySelector(RESPONSE_STOP_BUTTON_SELECTOR);
+  return button instanceof HTMLButtonElement ? button : null;
 }
 
 export function isSendButtonEnabled(button: HTMLButtonElement): boolean {
@@ -76,14 +51,23 @@ export function isSendButtonEnabled(button: HTMLButtonElement): boolean {
 }
 
 export function readComposerText(composer: ComposerElement): string {
-  if (composer instanceof HTMLTextAreaElement) {
-    return composer.value;
-  }
-
-  return composer.innerText || composer.textContent || "";
+  return composer instanceof HTMLTextAreaElement
+    ? composer.value
+    : composer.innerText || composer.textContent || "";
 }
 
 export function countStartedAssistantMessages(): number {
-  return Array.from(document.querySelectorAll(ASSISTANT_MESSAGE_SELECTOR))
-    .filter((message) => message.textContent?.trim()).length;
+  // A turn contains the user prompt as well as the response. Only assistant
+  // markdown qualifies; message IDs are not assigned until streaming finishes.
+  const turns = new Set<Element>();
+  document.querySelectorAll(ASSISTANT_MESSAGE_SELECTOR).forEach((markdown) => {
+    if (!markdown.textContent?.trim()) {
+      return;
+    }
+    const turn = markdown.closest(TURN_SELECTOR);
+    if (turn) {
+      turns.add(turn);
+    }
+  });
+  return turns.size;
 }
