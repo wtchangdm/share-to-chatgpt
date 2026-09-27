@@ -7,10 +7,13 @@
     "benchmark:auto-close-observation": "node --expose-gc scripts/benchmark-auto-close-observation.mjs",
     "benchmark:dispatch-policy": "node --expose-gc scripts/benchmark-dispatch-policy.mjs",
     "benchmark:query-stripping": "node --expose-gc scripts/benchmark-query-stripping.mjs",
+    "benchmark:prompt": "node --expose-gc scripts/benchmark-prompt.mjs",
+    "benchmark:composer-reading": "node scripts/test-composer-browser.mjs --benchmark",
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src tests",
     "test": "node scripts/test.mjs",
+    "test:composer-browser": "node scripts/test-composer-browser.mjs",
     "check": "npm run typecheck && npm run lint && npm test && npm run build"
   },
   "devDependencies": {

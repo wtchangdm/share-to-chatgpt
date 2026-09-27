@@ -2,7 +2,7 @@ export type SubmissionSnapshot =
   | { composerPresent: false }
   | {
     composerPresent: true;
-    composerHasExpectedPrompt: boolean;
+    composerHasExpectedPrompt: boolean | null;
     sendButtonEnabled: boolean | null;
   };
 
@@ -11,5 +11,5 @@ export function isSubmissionConfirmed(snapshot: SubmissionSnapshot): boolean {
     return false;
   }
 
-  return !snapshot.composerHasExpectedPrompt || snapshot.sendButtonEnabled === false;
+  return snapshot.composerHasExpectedPrompt === false || snapshot.sendButtonEnabled === false;
 }

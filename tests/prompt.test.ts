@@ -30,14 +30,16 @@ import { isSubmissionConfirmed } from "../src/submission";
 import type { DispatchPayload } from "../src/types";
 
 const pageUrl = "https://example.com/articles/one?x=1&y=two#section";
+const urlOnlySettings = { ...DEFAULT_SETTINGS, optionalText: "" };
 
 test("the default prompt and deep link preserve non-tracking query parameters", () => {
   const prompt = buildPrompt(pageUrl, DEFAULT_SETTINGS);
 
-  assert.equal(prompt, pageUrl);
+  const expected = `${DEFAULT_SETTINGS.optionalText} ${pageUrl}`;
+  assert.equal(prompt, expected);
   assert.equal(
     buildChatGPTUrl(prompt),
-    `https://chatgpt.com/?prompt=${encodeURIComponent(pageUrl)}`
+    `https://chatgpt.com/?prompt=${encodeURIComponent(expected)}`
   );
 });
 
@@ -73,7 +75,7 @@ for (const parameter of trackingQueryParameters) {
       `https://example.com/article?article=42&${parameter}=tracking#comments`;
 
     assert.equal(
-      buildPrompt(trackedUrl, DEFAULT_SETTINGS),
+      buildPrompt(trackedUrl, urlOnlySettings),
       "https://example.com/article?article=42#comments"
     );
   });
@@ -84,7 +86,7 @@ test("cleanup preserves the original encoding of retained URL data", () => {
     "https://example.com/path?keep=~&space=%20&utm_source=x#frag";
 
   assert.equal(
-    buildPrompt(trackedUrl, DEFAULT_SETTINGS),
+    buildPrompt(trackedUrl, urlOnlySettings),
     "https://example.com/path?keep=~&space=%20#frag"
   );
 });
@@ -94,7 +96,7 @@ test("cleanup removes duplicate and percent-encoded tracking parameter names", (
     "https://example.com/path?%75tm_source=first&keep=1&utm_source=second";
 
   assert.equal(
-    buildPrompt(trackedUrl, DEFAULT_SETTINGS),
+    buildPrompt(trackedUrl, urlOnlySettings),
     "https://example.com/path?keep=1"
   );
 });
@@ -103,7 +105,7 @@ test("cleanup is case-sensitive and does not inspect URL fragments", () => {
   const value =
     "https://example.com/path?UTM_SOURCE=keep#?utm_source=fragment";
 
-  assert.equal(buildPrompt(value, DEFAULT_SETTINGS), value);
+  assert.equal(buildPrompt(value, urlOnlySettings), value);
 });
 
 test("cleanup leaves malformed and non-HTTP URLs unchanged", () => {
@@ -111,7 +113,7 @@ test("cleanup leaves malformed and non-HTTP URLs unchanged", () => {
     "not a URL?utm_source=keep",
     "chrome://extensions/?utm_source=keep"
   ]) {
-    assert.equal(buildPrompt(value, DEFAULT_SETTINGS), value);
+    assert.equal(buildPrompt(value, urlOnlySettings), value);
   }
 });
 
@@ -130,11 +132,11 @@ test("cleanup parses a URL only after finding a tracking parameter candidate", (
   });
 
   try {
-    buildPrompt("https://example.com/path", DEFAULT_SETTINGS);
-    buildPrompt("https://example.com/path?keep=1#frag", DEFAULT_SETTINGS);
+    buildPrompt("https://example.com/path", urlOnlySettings);
+    buildPrompt("https://example.com/path?keep=1#frag", urlOnlySettings);
     assert.equal(constructions, 0);
 
-    buildPrompt("https://example.com/path?utm_source=x", DEFAULT_SETTINGS);
+    buildPrompt("https://example.com/path?utm_source=x", urlOnlySettings);
     assert.equal(constructions, 1);
   } finally {
     Object.defineProperty(globalThis, "URL", {
@@ -148,7 +150,7 @@ test("tracking-parameter cleanup can be disabled", () => {
   const trackedUrl = "https://example.com/article?utm_source=newsletter&article=42#comments";
 
   assert.equal(
-    buildPrompt(trackedUrl, { ...DEFAULT_SETTINGS, stripTrackingParameters: false }),
+    buildPrompt(trackedUrl, { ...urlOnlySettings, stripTrackingParameters: false }),
     trackedUrl
   );
 });
@@ -167,10 +169,24 @@ test("optional text can be appended without creating a multiline prompt", () => 
   );
 });
 
-test("line breaks in optional text are normalized for composer verification", () => {
+for (const placement of ["prepend", "append"] as const) {
+  for (const newline of ["\n", "\r\n", "\r"]) {
+    test(`optional text preserves paragraphs with ${JSON.stringify(newline)} (${placement})`, () => {
+      const optionalText = `  Summarize.${newline}${newline}Assess evidence.${newline}  Keep indentation.  `;
+      const text = "Summarize.\n\nAssess evidence.\n  Keep indentation.";
+      const expected = placement === "prepend" ? `${text} ${pageUrl}` : `${pageUrl} ${text}`;
+      const prompt = buildPrompt(pageUrl, { optionalText, placement });
+
+      assert.equal(prompt, expected);
+      assert.equal(new URL(buildChatGPTUrl(prompt)).searchParams.get("prompt"), expected);
+    });
+  }
+}
+
+test("whitespace-only optional text produces only the URL", () => {
   assert.equal(
-    buildPrompt(pageUrl, { optionalText: "Compare\n\ncarefully", placement: "prepend" }),
-    `Compare carefully ${pageUrl}`
+    buildPrompt(pageUrl, { optionalText: " \r\n\n\t ", placement: "prepend" }),
+    pageUrl
   );
 });
 
@@ -191,7 +207,7 @@ test("automatic submission and closing settings are restored", () => {
   assert.deepEqual(
     normalizeSettings({ autoSubmit: false, autoClose: true }),
     {
-      optionalText: "",
+      optionalText: DEFAULT_SETTINGS.optionalText,
       placement: "prepend",
       stripTrackingParameters: true,
       autoSubmit: false,
@@ -421,6 +437,16 @@ test("a temporarily missing composer does not confirm submission", () => {
     composerHasExpectedPrompt: true,
     sendButtonEnabled: false
   }), true);
+});
+
+test("unreadable composer text is not evidence that the expected prompt was cleared", () => {
+  for (const sendButtonEnabled of [true, null]) {
+    assert.equal(isSubmissionConfirmed({
+      composerPresent: true,
+      composerHasExpectedPrompt: null,
+      sendButtonEnabled
+    }), false);
+  }
 });
 
 test("failure action titles are useful without exposing dispatch data", () => {

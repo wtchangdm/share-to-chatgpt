@@ -67,6 +67,10 @@ npm run benchmark:query-stripping
 
 Its fixed scenarios cover URLs with no query, clean query parameters, tracking parameters, and encoded retained data.
 
+For prompt construction, use `npm run benchmark:prompt`. Its fixed scenarios cover URL-only, single-line, and multiline Prompt text.
+
+For composer text reading, use `npm run benchmark:composer-reading` (requires `agent-browser` and Chromium). It measures bundled production reads of fixed multiline textarea and contenteditable fixtures in an isolated browser.
+
 For automatic-close DOM observation, use:
 
 ```sh
@@ -92,6 +96,8 @@ npm run check
 ```
 
 This performs TypeScript checking, ESLint, unit tests, and a production build. For behavior crossing the Chrome or ChatGPT runtime boundary, also run the applicable manual regression cases in `spec.md`. Report automated checks and manual checks separately, including anything not run and the exact reason.
+
+For composer insertion changes, also run `npm run test:composer-browser` (requires an installed `agent-browser` and Chromium). This runs `tests/browser/composer.ts` in an isolated local browser, including native insertion, forced fallback, repeated use, and reset. It does not access a signed-in profile or replace live ChatGPT regression checks.
 
 ## Live ChatGPT troubleshooting
 

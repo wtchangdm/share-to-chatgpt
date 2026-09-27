@@ -50,10 +50,39 @@ export function isSendButtonEnabled(button: HTMLButtonElement): boolean {
   return !button.disabled && button.getAttribute("aria-disabled") !== "true";
 }
 
-export function readComposerText(composer: ComposerElement): string {
-  return composer instanceof HTMLTextAreaElement
-    ? composer.value
-    : composer.innerText || composer.textContent || "";
+function readComposerLine(element: HTMLElement): string | null {
+  let text = "";
+  for (let node = element.firstChild; node; node = node.nextSibling) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      text += node.textContent ?? "";
+    } else if (node instanceof HTMLBRElement) {
+      // Observed editor placeholder, not a user-authored hard line break.
+      if (node === element.lastChild && node.classList.contains("ProseMirror-trailingBreak")) {
+        continue;
+      }
+      text += "\n";
+    } else {
+      // Do not silently omit unfamiliar rich content or infer its formatting.
+      return null;
+    }
+  }
+  return text;
+}
+
+export function readComposerText(composer: ComposerElement): string | null {
+  if (composer instanceof HTMLTextAreaElement) return composer.value;
+  if (!(composer.firstChild instanceof HTMLParagraphElement)) return readComposerLine(composer);
+
+  // ChatGPT represents each input line as a paragraph. innerText adds visual
+  // paragraph spacing, so it cannot verify the editor's logical line breaks.
+  const lines: string[] = [];
+  for (let node: ChildNode | null = composer.firstChild; node; node = node.nextSibling) {
+    if (!(node instanceof HTMLParagraphElement)) return null;
+    const line = readComposerLine(node);
+    if (line === null) return null;
+    lines.push(line);
+  }
+  return lines.join("\n");
 }
 
 export function countStartedAssistantMessages(): number {

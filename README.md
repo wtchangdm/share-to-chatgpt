@@ -15,7 +15,7 @@ javascript:(()=>{window.open(`https://chatgpt.com/?prompt=${encodeURIComponent(l
 - Adds **Send link to ChatGPT** to link context menus.
 - Sends a hovered link—or the current page when no link is hovered—with `Command+B` on macOS or `Ctrl+B` on other platforms.
 - Removes common campaign and click-tracking parameters while preserving other URL data.
-- Supports optional text before or after the URL.
+- Includes a customizable summary-and-analysis prompt before or after the URL; leave it empty to send only the URL.
 - Can prefill without submitting.
 - Can close the ChatGPT tab after ChatGPT assigns a canonical conversation URL and starts responding.
 - Shows data-safe progress, success, and failure states on the extension action.
@@ -51,10 +51,12 @@ Reload the extension from `chrome://extensions` after rebuilding it.
 
 | Option | Default | Behavior |
 | --- | --- | --- |
-| Optional text | Empty | Added before or after the URL. Line breaks are normalized to spaces. |
+| Prompt | Summary and analysis instructions | Added before or after the URL. Can be empty to send only the URL. Preserves line breaks and blank lines; trims surrounding whitespace. |
 | Remove common tracking parameters from shared URLs | On | Removes the known parameters listed below while preserving other query parameters and fragments. |
 | Automatically submit the prompt | On | Turn off to prefill the composer without submitting. |
 | Close the ChatGPT tab after ChatGPT assigns a conversation URL and starts responding | Off | Closes after a canonical `/c/<UUID>` URL appears together with either ChatGPT's enabled form-scoped Stop button or a new non-empty assistant response. Does not wait for the full answer. If the canonical URL is unavailable, response completion is the fallback. Waits up to approximately two minutes. Requires automatic submission. |
+
+The default prompt asks for a brief summary, evidence-aware analysis, caveats, and personal relevance. It applies when no prompt has been saved; existing saved prompts, including empty ones, remain unchanged. The exact default is documented in [spec.md](spec.md#default-prompt).
 
 With link cleanup enabled, the extension removes these exact, case-sensitive parameter names from HTTP and HTTPS URLs:
 

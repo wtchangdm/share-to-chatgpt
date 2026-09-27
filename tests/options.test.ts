@@ -7,6 +7,17 @@ import {
   type OptionsFields,
   type SettingsStorage
 } from "../src/options-model";
+import { DEFAULT_SETTINGS, normalizeSettings } from "../src/prompt";
+
+const defaultPrompt = `Start with a brief summary of the key takeaways, then analyze the page.
+
+Distinguish what is established, what the page asserts or interprets, and what is speculative. Assess the strongest evidence and important caveats, and include meaningful counterarguments or missing context when relevant. Add external context or verification only when it materially improves understanding, using reliable sources and citing them.
+
+Explain why it matters in context, and call out anything important, surprising, overstated, weakly supported, or easy to misunderstand. Suggest worthwhile follow-up reading only when useful.
+
+Finally, tell me why this may matter to me, what I can learn from it, and whether reading the original adds much beyond the summary.
+
+Keep the depth proportional to the material. Don't manufacture false balance or turn a simple page into a long essay.`;
 
 function optionsFields(): OptionsFields {
   return {
@@ -18,6 +29,38 @@ function optionsFields(): OptionsFields {
     status: { textContent: "" }
   };
 }
+
+test("missing or invalid prompt settings use the exact default analysis prompt", () => {
+  assert.equal(DEFAULT_SETTINGS.optionalText, defaultPrompt);
+  for (const settings of [undefined, {}, { optionalText: 123 as unknown as string }]) {
+    assert.equal(normalizeSettings(settings).optionalText, defaultPrompt);
+  }
+});
+
+test("prompt defaults load without overwriting saved text or an intentionally empty prompt", async () => {
+  let stored: Record<string, unknown> = {};
+  const storage: SettingsStorage = {
+    async get() { return stored; },
+    async set(items) { stored = items; }
+  };
+  const fields = optionsFields();
+  assert.equal(await loadOptions(fields, storage), true);
+  assert.equal(fields.optionalText.value, defaultPrompt);
+  assert.deepEqual(stored, {});
+
+  for (const savedText of ["", "Custom instructions.\n\nKeep these paragraphs.", " \n "]) {
+    fields.optionalText.value = savedText;
+    assert.equal(await saveOptions(fields, storage, () => 0), true);
+    const reopened = optionsFields();
+    assert.equal(await loadOptions(reopened, storage), true);
+    assert.equal(reopened.optionalText.value, savedText);
+    assert.equal(normalizeSettings(stored.settings as { optionalText: string }).optionalText, savedText);
+  }
+
+  stored = {};
+  assert.equal(await loadOptions(fields, storage), true);
+  assert.equal(fields.optionalText.value, defaultPrompt);
+});
 
 test("tracking cleanup help is associated with its checkbox", () => {
   const html = readFileSync("options.html", "utf8");

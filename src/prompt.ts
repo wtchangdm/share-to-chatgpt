@@ -1,7 +1,15 @@
 import type { Settings } from "./types";
 
 export const DEFAULT_SETTINGS: Settings = {
-  optionalText: "",
+  optionalText: `Start with a brief summary of the key takeaways, then analyze the page.
+
+Distinguish what is established, what the page asserts or interprets, and what is speculative. Assess the strongest evidence and important caveats, and include meaningful counterarguments or missing context when relevant. Add external context or verification only when it materially improves understanding, using reliable sources and citing them.
+
+Explain why it matters in context, and call out anything important, surprising, overstated, weakly supported, or easy to misunderstand. Suggest worthwhile follow-up reading only when useful.
+
+Finally, tell me why this may matter to me, what I can learn from it, and whether reading the original adds much beyond the summary.
+
+Keep the depth proportional to the material. Don't manufacture false balance or turn a simple page into a long essay.`,
   placement: "prepend",
   stripTrackingParameters: true,
   autoSubmit: true,
@@ -98,7 +106,9 @@ export function stripCommonTrackingParameters(value: string): string {
 
 export function normalizeSettings(value: Partial<Settings> | undefined): Settings {
   return {
-    optionalText: typeof value?.optionalText === "string" ? value.optionalText : "",
+    optionalText: typeof value?.optionalText === "string"
+      ? value.optionalText
+      : DEFAULT_SETTINGS.optionalText,
     placement: value?.placement === "append" ? "append" : "prepend",
     stripTrackingParameters: value?.stripTrackingParameters !== false,
     autoSubmit: value?.autoSubmit !== false,
@@ -116,7 +126,7 @@ export function buildPrompt(
     : stripCommonTrackingParameters(url);
   const optionalText = settings.optionalText
     .trim()
-    .replace(/\s*[\r\n]+\s*/g, " ");
+    .replace(/\r\n?/g, "\n");
   if (!optionalText) {
     return targetUrl;
   }

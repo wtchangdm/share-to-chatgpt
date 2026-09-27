@@ -40,8 +40,13 @@ function normalizeComposerText(text: string): string {
   return text.replaceAll("\u00a0", " ").replaceAll("\r\n", "\n").trim();
 }
 
+function readComposerPromptMatch(composer: ComposerElement, prompt: string): boolean | null {
+  const text = readComposerText(composer);
+  return text === null ? null : normalizeComposerText(text) === normalizeComposerText(prompt);
+}
+
 export function composerHasPrompt(composer: ComposerElement, prompt: string): boolean {
-  return normalizeComposerText(readComposerText(composer)) === normalizeComposerText(prompt);
+  return readComposerPromptMatch(composer, prompt) === true;
 }
 
 export function waitFor<T>(readValue: () => T | null, deadline: number): Promise<T | null> {
@@ -143,7 +148,8 @@ export function insertPrompt(composer: ComposerElement, prompt: string): void {
       return;
     }
     const paragraph = document.createElement("p");
-    paragraph.textContent = prompt;
+    // The native setter creates <br> nodes instead of collapsible newline text.
+    paragraph.innerText = prompt;
     composer.replaceChildren(paragraph);
   }
   composer.dispatchEvent(new InputEvent("input", {
@@ -223,7 +229,7 @@ async function submitAndObserve(dispatch: DispatchPayload): Promise<boolean> {
     const button = findSendButton(composer);
     return isSubmissionConfirmed({
       composerPresent: true,
-      composerHasExpectedPrompt: composerHasPrompt(composer, dispatch.prompt),
+      composerHasExpectedPrompt: readComposerPromptMatch(composer, dispatch.prompt),
       sendButtonEnabled: button ? isSendButtonEnabled(button) : null
     }) ? true : null;
   }, Math.min(dispatch.expiresAt, Date.now() + SUBMISSION_CONFIRM_TIMEOUT_MS));

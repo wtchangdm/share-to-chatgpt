@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { DEFAULT_SETTINGS } from "../src/prompt";
 import type {
   ContentMessage,
   DispatchPayload,
@@ -172,7 +173,7 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
     assert.equal(updatedTabs[0]?.dispatchAtNavigation?.status, "pending");
     assert.equal(
       updatedTabs[0]?.dispatchAtNavigation?.prompt,
-      "https://example.com/article?item=42#details"
+      `${DEFAULT_SETTINGS.optionalText} https://example.com/article?item=42#details`
     );
 
     const pending = dispatchEntries(session)[0];
@@ -336,7 +337,7 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
     await waitUntil(() => lastBadgeText(badgeUpdates, 30) === "");
     assert.equal(lastActionTitle(titleUpdates, 30), "Send this page to ChatGPT");
 
-    localSettings = { stripTrackingParameters: false };
+    localSettings = { optionalText: "", stripTrackingParameters: false };
     const unchangedUrl =
       "https://example.com/article?utm_source=newsletter&item=42#details";
     actionClickListener({ id: 40, url: unchangedUrl } as chrome.tabs.Tab);

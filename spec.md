@@ -10,7 +10,7 @@ The original bookmarklet workflow is:
 javascript:(()=>{window.open(`https://chatgpt.com/?prompt=${encodeURIComponent(location.href)}`,"_blank","noopener,noreferrer")})()
 ```
 
-With default settings, the prompt is the target URL after the conservative tracking-parameter cleanup defined below. A URL without a listed tracking parameter remains byte-for-byte unchanged, and the ChatGPT deep link remains:
+With default settings, the shared prompt is the [default analysis text](#default-prompt), one space, and the target URL after the conservative tracking-parameter cleanup defined below. A URL without a listed tracking parameter remains byte-for-byte unchanged. When the Prompt setting is empty, only the URL is sent, and the ChatGPT deep link is:
 
 ```text
 https://chatgpt.com/?prompt=<encoded cleaned target URL>
@@ -44,13 +44,29 @@ Settings are stored under `settings` in `chrome.storage.local`.
 
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `optionalText` | `string` | `""` | Text added to the target URL. |
-| `placement` | `"prepend" \| "append"` | `"prepend"` | Whether optional text appears before or after the URL. |
+| `optionalText` | `string` | [Default prompt](#default-prompt) | The user-editable Prompt text added to the target URL; may be empty. |
+| `placement` | `"prepend" \| "append"` | `"prepend"` | Whether Prompt text appears before or after the URL. |
 | `stripTrackingParameters` | `boolean` | `true` | Whether known tracking parameters are removed before prompt construction. |
 | `autoSubmit` | `boolean` | `true` | Whether the verified prompt is submitted automatically. |
 | `autoClose` | `boolean` | `false` | Whether the target tab closes after ChatGPT assigns a canonical conversation URL and starts responding. Effective only when `autoSubmit` is enabled. |
 
-A blank optional-text value produces only the cleaned or original target URL. Non-empty optional text and the URL are separated by one space. Line breaks in optional text are normalized to spaces to avoid contenteditable paragraph mismatches.
+A blank Prompt value produces only the cleaned or original target URL. Non-empty Prompt text and the URL are separated by one space. Surrounding whitespace is trimmed, but internal line breaks, blank lines, and indentation are preserved. CRLF and CR line endings are normalized to LF, not spaces.
+
+The storage key remains `optionalText` for compatibility with saved settings. Missing or non-string values use the default prompt; existing string values, including empty or whitespace-only strings, are preserved. Loading defaults does not write settings or overwrite saved preferences.
+
+### Default prompt
+
+```text
+Start with a brief summary of the key takeaways, then analyze the page.
+
+Distinguish what is established, what the page asserts or interprets, and what is speculative. Assess the strongest evidence and important caveats, and include meaningful counterarguments or missing context when relevant. Add external context or verification only when it materially improves understanding, using reliable sources and citing them.
+
+Explain why it matters in context, and call out anything important, surprising, overstated, weakly supported, or easy to misunderstand. Suggest worthwhile follow-up reading only when useful.
+
+Finally, tell me why this may matter to me, what I can learn from it, and whether reading the original adds much beyond the summary.
+
+Keep the depth proportional to the material. Don't manufacture false balance or turn a simple page into a long essay.
+```
 
 ### Tracking-parameter cleanup
 
@@ -171,6 +187,8 @@ Priority:
 
 All candidates stay inside a main-content form; no historical ID or page-wide form matching.
 
+Read textarea values directly. The observed contenteditable editor represents input lines as direct `p` children, including empty paragraphs containing a terminal `br.ProseMirror-trailingBreak` placeholder. Read text nodes and hard `br` line breaks, ignore only that terminal placeholder, and join paragraphs with one LF. Flat text/`br` content from insertion uses the same reader. Do not use layout-dependent `innerText` for verification: it adds visual paragraph spacing that is not part of the prompt. Unrecognized elements or mixed paragraph structures are unverifiable and must not pass prompt checks.
+
 ### Send button
 
 Use an enabled `button[type="submit"]` inside the composer's form, respecting `disabled` and `aria-disabled`. Do not depend on localized labels, historical test IDs, or page-wide “Send” text matching.
@@ -201,9 +219,9 @@ If fallback insertion is required:
 
 - A textarea uses the native `HTMLTextAreaElement.prototype.value` setter and an `input` event.
 - A contenteditable composer uses selection plus `document.execCommand("insertText")`.
-- If that does not produce the expected value, the composer receives a paragraph node and an `input` event.
+- If that does not produce the expected value, the composer receives a paragraph node populated through the native `innerText` setter (which represents line breaks as `br` nodes), followed by an `input` event. Prompt text is never interpreted as HTML.
 
-The composer is read back after insertion. Submission is forbidden unless its normalized text exactly equals the expected prompt.
+The composer is read back after insertion. Submission is forbidden unless its normalized text exactly equals the expected prompt. Comparison normalizes non-breaking spaces, CRLF line endings, and surrounding whitespace only; internal line breaks and blank lines must match. Collapsed or missing paragraphs do not qualify.
 
 ## Submission and automatic closing
 
@@ -225,7 +243,7 @@ form.requestSubmit(button);
 
 `button.click()` is used only when the form is unavailable or `requestSubmit` throws. No synthetic keyboard event is used.
 
-Submission is confirmed when the composer remains observable and either no longer contains the expected prompt or its Send button becomes disabled. A temporarily missing composer is treated as uncertainty and does not confirm submission.
+Submission is confirmed when the composer remains observable and either no longer contains the expected prompt or its Send button becomes disabled. A temporarily missing composer is treated as uncertainty and does not confirm submission. Unreadable composer content is not evidence that the expected prompt was cleared; in that case only an observable disabled Send button can confirm submission.
 
 With `autoClose` enabled, record the non-empty assistant-turn count before submission and follow the [response-signal policy](#assistant-response). On success, ask the service worker to close the target using `chrome.tabs.remove`; on timeout, leave it open. Skip response scans on the Stop fast path, while a temporary-path response is streaming, and entirely when auto-close is disabled.
 
@@ -282,6 +300,8 @@ Run the cases relevant to a change and report which cases were verified in the c
 - Disable link cleanup, send the same URL, and verify it remains unchanged.
 - Save prepend text in **Options**, send a page, and verify `text + space + cleaned URL`.
 - Save append text, send a link, and verify `cleaned URL + space + text`.
+- In a fresh extension profile, confirm Options displays the default Prompt. Clear it, save, reopen Options, and confirm it stays empty and sharing sends only the URL. Existing custom prompts must also remain unchanged after reload.
+- Save Prompt text with multiple paragraphs, blank lines, and single line breaks; verify they survive both prepend and append, deep-link prefill, and fallback insertion. In the current contenteditable editor, verify direct paragraphs and empty-paragraph placeholders compare as logical lines, without accepting missing blank lines or collapsed text. Repeat with automatic submission disabled, then enabled, verifying one correctly formatted message and no collapsed paragraphs. If exact formatting cannot be verified, confirm the tab stays open without submission.
 - Trigger two dispatches close together and verify each target tab submits its own prompt once.
 - Log out of ChatGPT or block the composer, dispatch again, and confirm no prompt is submitted, the tab remains open, and a red `!` badge or error appears.
 - Open an unrelated ChatGPT tab and confirm it does not auto-submit anything.

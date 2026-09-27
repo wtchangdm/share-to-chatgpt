@@ -9,10 +9,11 @@
   <body>
     <main>
       <h1>Share to ChatGPT</h1>
-      <p>The toolbar button opens a background ChatGPT tab immediately. This optional text is added to future page and link prompts.</p>
+      <p>The toolbar button opens a background ChatGPT tab immediately. Your prompt is added before or after each shared page or link URL.</p>
       <form id="settings-form">
-        <label for="optional-text">Optional text</label>
-        <textarea id="optional-text" rows="5" placeholder="For example: Summarize this page"></textarea>
+        <label for="optional-text">Prompt</label>
+        <textarea id="optional-text" rows="10" aria-describedby="prompt-help"></textarea>
+        <p id="prompt-help">Leave empty to send only the URL. Line breaks and blank lines are preserved.</p>
 
         <label for="placement">Placement</label>
         <select id="placement">
