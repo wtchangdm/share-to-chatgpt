@@ -21,6 +21,12 @@ javascript:(()=>{window.open(`https://chatgpt.com/?prompt=${encodeURIComponent(l
 - Shows data-safe progress, success, and failure states on the extension action.
 - Uses the existing signed-in `chatgpt.com` session—no OpenAI API key or paid API.
 
+## Chrome Web Store installation
+
+The unlisted release is being prepared; no store installation link is available yet. Once published, open the store link shared by the publisher and choose **Add to Chrome**. Store installation does not require Node.js, a build, or Developer mode. Anyone who receives or is forwarded an unlisted link can install it; unlisted does not mean private access.
+
+After installation, sign in to `https://chatgpt.com`, pin the extension, and review **Options** before sharing. This is an independent extension, not affiliated with or endorsed by OpenAI. Normal ChatGPT access and usage limits apply.
+
 ## Build and install
 
 Requirements: Chrome 120 or newer, a current Node.js LTS release, and npm.
@@ -84,6 +90,8 @@ See [Chrome's documentation](https://developer.chrome.com/docs/devtools/agents/u
 
 The complete behavior contract, architecture, failure handling, security constraints, selector strategy, and manual regression checklist are in [spec.md](spec.md).
 
+Release packaging and submission preparation are documented in [AGENTS.md](AGENTS.md#chrome-web-store-release-preparation). Prepared store copy and asset paths are in [store/listing.md](store/listing.md).
+
 Run the full automated validation suite with:
 
 ```sh
@@ -99,6 +107,8 @@ npm run benchmark:query-stripping
 Generated scripts are written to `dist/`; do not edit them directly.
 
 ## Privacy and compatibility
+
+Read the [privacy policy](PRIVACY.md) for data use, retention, and your choices. Sharing sends the URL and prompt to ChatGPT even when automatic submission is disabled, because they are included in the navigation URL. Browser history and ChatGPT may retain that information. Do not share confidential links or sensitive prompt text; tracking cleanup is not a sensitive-data scrubber.
 
 Settings and dispatch state stay in local Chrome extension storage. The constructed prompt—including the page or link URL—is sent only to `chatgpt.com` through normal page navigation and is not sent to any other service. The shortcut inspects the active page only when pressed, using Chrome's temporary `activeTab` access; the extension has no persistent all-sites access.
 

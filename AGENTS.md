@@ -99,6 +99,19 @@ This performs TypeScript checking, ESLint, unit tests, and a production build. F
 
 For composer insertion changes, also run `npm run test:composer-browser` (requires an installed `agent-browser` and Chromium). This runs `tests/browser/composer.ts` in an isolated local browser, including native insertion, forced fallback, repeated use, and reset. It does not access a signed-in profile or replace live ChatGPT regression checks.
 
+## Chrome Web Store release preparation
+
+Store copy, permission justifications, reviewer instructions, and image paths are in [store/listing.md](store/listing.md). The public-facing policy is [PRIVACY.md](PRIVACY.md); keep both aligned with the final implementation. Unlisted releases undergo the same review as public releases.
+
+1. Run `npm run check` and `npm run test:composer-browser`, then the release-relevant [manual regressions](spec.md#manual-regression-checklist). Record automated, isolated-browser, and live ChatGPT results separately; do not treat an Options screenshot as ChatGPT validation.
+2. Run `npm run package`. It rebuilds production code and creates `release/share-to-chatgpt-<version>.zip` with only the runtime allowlist. Packaging requires `zip` on PATH; package tests also require `unzip`. Both are provided by macOS and commonly available on Linux. Generated `release/` files are ignored. Do not upload the repository, source maps, or test fixtures.
+3. Check `unzip -t release/share-to-chatgpt-<version>.zip` and inspect its file list. Extract into a new temporary directory and load that directory in an isolated Chromium session to verify the actual archive, not just the source checkout. The packaging regression test covers first use, replacement of stale archive entries, failure without replacing a good archive, and recovery.
+4. Verify asset dimensions and appearance. Capture `store/screenshot-options.png` at 1280×800, light mode, from the real extension Options page with default settings in an isolated profile, without mocking storage or showing conversation content. Render `store/promo.svg` at 440×280 to refresh the promotional PNG. Generate `icons/icon128.png` from `icons/icon.svg` with 96×96 artwork centered in a transparent 128×128 canvas; smaller toolbar icons remain full-size.
+5. Before submission, confirm the publisher account's registration, two-step verification, publisher name, verified contact email, and intended distribution regions. Publish the policy at a stable HTTPS URL only with authorization, and verify signed-out access. Review and certify the dashboard data disclosures against the final build.
+6. With explicit upload/submission approval, create the store item, upload the ZIP and assets, use the prepared listing copy, choose **Unlisted**, and disable automatic publication after review. Publishing requires a separate final decision. Each later uploaded version must increase `manifest.json`'s version; keep `package.json` aligned.
+
+Do not pay fees, expose account details, publish a policy, upload a package, or submit/publish a store item without authorization covering that action. No developer or user ChatGPT credentials belong in reviewer instructions. Confirm any unpacked-to-store migration manually; Chrome may treat them as separate installations, so saved settings should not be assumed to migrate and duplicate enabled installations should be avoided.
+
 ## Live ChatGPT troubleshooting
 
 Follow the [README setup](README.md#troubleshooting-with-a-live-debug-session) and stay within the authorized tabs and tests. With `agent-browser` installed, load its guidance and create a named, pinned session:

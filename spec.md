@@ -63,7 +63,7 @@ Distinguish what is established, what the page asserts or interprets, and what i
 
 Explain why it matters in context, and call out anything important, surprising, overstated, weakly supported, or easy to misunderstand. Suggest worthwhile follow-up reading only when useful.
 
-Finally, tell me why this may matter to me, what I can learn from it, and whether reading the original adds much beyond the summary.
+Finally, tell me why this may matter to me, what I can learn from it, and recommend reading the original only if it adds substantial value beyond the summary.
 
 Keep the depth proportional to the material. Don't manufacture false balance or turn a simple page into a long essay.
 ```
@@ -110,6 +110,8 @@ src/
 ```
 
 The extension uses no framework. esbuild bundles the three browser entry points into `dist/`.
+
+The store artifact places `manifest.json` at the ZIP root alongside `options.html`, `options.css`, the three bundled JavaScript entry points, and the four manifest-referenced PNG icons. `scripts/package.mjs` uses an explicit runtime allowlist and replaces the versioned archive only after successful packaging; source maps, tests, development dependencies, and store materials are excluded. Packaging does not change runtime permissions or behavior. See [release preparation](AGENTS.md#chrome-web-store-release-preparation) for the contributor workflow.
 
 ## Permissions
 

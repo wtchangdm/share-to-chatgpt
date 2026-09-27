@@ -7,7 +7,7 @@ Distinguish what is established, what the page asserts or interprets, and what i
 
 Explain why it matters in context, and call out anything important, surprising, overstated, weakly supported, or easy to misunderstand. Suggest worthwhile follow-up reading only when useful.
 
-Finally, tell me why this may matter to me, what I can learn from it, and whether reading the original adds much beyond the summary.
+Finally, tell me why this may matter to me, what I can learn from it, and recommend reading the original only if it adds substantial value beyond the summary.
 
 Keep the depth proportional to the material. Don't manufacture false balance or turn a simple page into a long essay.`,
   placement: "prepend",

@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="440" height="280" viewBox="0 0 440 280" role="img" aria-label="A page link sent to a background conversation">
+  <defs>
+    <linearGradient id="background" x2="1" y2="1">
+      <stop stop-color="#12368B"/>
+      <stop offset="1" stop-color="#2563EB"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#background)" d="M0 0h440v280H0z"/>
+  <circle cx="410" cy="30" r="135" fill="#60A5FA" opacity=".12"/>
+  <circle cx="25" cy="275" r="110" fill="#60A5FA" opacity=".12"/>
+  <rect x="37" y="58" width="158" height="170" rx="16" fill="#DBEAFE"/>
+  <path d="M37 92h158" stroke="#93C5FD" stroke-width="2"/>
+  <g fill="#2563EB">
+    <circle cx="54" cy="75" r="3"/><circle cx="65" cy="75" r="3"/><circle cx="76" cy="75" r="3"/>
+  </g>
+  <g fill="#93C5FD">
+    <rect x="56" y="114" width="91" height="8" rx="4"/>
+    <rect x="56" y="132" width="118" height="8" rx="4"/>
+    <rect x="56" y="150" width="77" height="8" rx="4"/>
+  </g>
+  <g stroke="#2563EB" stroke-width="5" fill="none" stroke-linecap="round">
+    <path d="m89 181-8 8a10 10 0 0 0 14 14l9-9m6-5 8-8a10 10 0 0 0-14-14l-9 9m-5 14 17-17"/>
+  </g>
+  <path d="M192 141h50m-13-13 14 13-14 13" stroke="#FFF" stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <g transform="translate(270 83) scale(.86)">
+    <rect width="128" height="128" rx="28" fill="#2563EB" stroke="#93C5FD" stroke-width="2"/>
+    <path d="M31 32h66a11 11 0 0 1 11 11v38a11 11 0 0 1-11 11H63L42 108V92H31a11 11 0 0 1-11-11V43a11 11 0 0 1 11-11Z" fill="none" stroke="#FFF" stroke-width="9" stroke-linejoin="round"/>
+    <path d="M45 63h37M71 49l14 14-14 14" fill="none" stroke="#FFF" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
