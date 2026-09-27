@@ -62,6 +62,41 @@ test("prompt defaults load without overwriting saved text or an intentionally em
   assert.equal(fields.optionalText.value, defaultPrompt);
 });
 
+test("automatic closing defaults load without writes and preserve saved choices across reloads", async () => {
+  let stored: Record<string, unknown> = {};
+  const storage: SettingsStorage = {
+    async get() { return stored; },
+    async set(items) { stored = items; }
+  };
+  const fields = optionsFields();
+  assert.equal(await loadOptions(fields, storage), true);
+  assert.equal(fields.autoClose.checked, true);
+  assert.equal(fields.autoClose.disabled, false);
+  assert.deepEqual(stored, {});
+
+  for (const autoClose of [false, true]) {
+    fields.autoClose.checked = autoClose;
+    assert.equal(await saveOptions(fields, storage, () => 0), true);
+    for (let reload = 0; reload < 2; reload++) {
+      const reopened = optionsFields();
+      assert.equal(await loadOptions(reopened, storage), true);
+      assert.equal(reopened.autoClose.checked, autoClose);
+    }
+  }
+
+  stored = { settings: { autoSubmit: false } };
+  assert.equal(await loadOptions(fields, storage), true);
+  assert.equal(fields.autoClose.checked, true);
+  assert.equal(fields.autoClose.disabled, true);
+  assert.deepEqual(stored, { settings: { autoSubmit: false } });
+
+  stored = {};
+  assert.equal(await loadOptions(fields, storage), true);
+  assert.equal(fields.autoClose.checked, true);
+  assert.equal(fields.autoClose.disabled, false);
+  assert.deepEqual(stored, {});
+});
+
 test("tracking cleanup help is associated with its checkbox", () => {
   const html = readFileSync("options.html", "utf8");
 

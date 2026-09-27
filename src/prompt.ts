@@ -13,7 +13,7 @@ Keep the depth proportional to the material. Don't manufacture false balance or 
   placement: "prepend",
   stripTrackingParameters: true,
   autoSubmit: true,
-  autoClose: false
+  autoClose: true
 };
 
 const CHATGPT_BASE_URL = "https://chatgpt.com/";
@@ -112,7 +112,7 @@ export function normalizeSettings(value: Partial<Settings> | undefined): Setting
     placement: value?.placement === "append" ? "append" : "prepend",
     stripTrackingParameters: value?.stripTrackingParameters !== false,
     autoSubmit: value?.autoSubmit !== false,
-    autoClose: value?.autoClose === true
+    autoClose: value?.autoClose === undefined ? DEFAULT_SETTINGS.autoClose : value.autoClose === true
   };
 }
 

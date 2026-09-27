@@ -156,7 +156,6 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
     assert.ok(tabUpdatedListener);
     assert.ok(tabRemovedListener);
 
-    localSettings = { autoClose: true };
     actionClickListener({
       id: 10,
       url: "https://example.com/article?utm_source=newsletter&item=42#details"
@@ -179,6 +178,7 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
     const pending = dispatchEntries(session)[0];
     assert.ok(pending);
     assert.equal(pending.status, "pending");
+    assert.equal(pending.autoClose, true);
     assert.equal(pending.sourceTabId, 10);
     assert.equal(pending.targetTabId, 20);
     assert.equal(lastBadgeText(badgeUpdates, 10), "…");

@@ -48,11 +48,13 @@ Settings are stored under `settings` in `chrome.storage.local`.
 | `placement` | `"prepend" \| "append"` | `"prepend"` | Whether Prompt text appears before or after the URL. |
 | `stripTrackingParameters` | `boolean` | `true` | Whether known tracking parameters are removed before prompt construction. |
 | `autoSubmit` | `boolean` | `true` | Whether the verified prompt is submitted automatically. |
-| `autoClose` | `boolean` | `false` | Whether the target tab closes after ChatGPT assigns a canonical conversation URL and starts responding. Effective only when `autoSubmit` is enabled. |
+| `autoClose` | `boolean` | `true` | Whether the target tab closes after ChatGPT assigns a canonical conversation URL and starts responding. Effective only when `autoSubmit` is enabled. |
 
 A blank Prompt value produces only the cleaned or original target URL. Non-empty Prompt text and the URL are separated by one space. Surrounding whitespace is trimmed, but internal line breaks, blank lines, and indentation are preserved. CRLF and CR line endings are normalized to LF, not spaces.
 
 The storage key remains `optionalText` for compatibility with saved settings. Missing or non-string values use the default prompt; existing string values, including empty or whitespace-only strings, are preserved. Loading defaults does not write settings or overwrite saved preferences.
+
+Automatic closing defaults to on only when `autoClose` is absent or undefined. Saved boolean values, including `false`, are preserved; other invalid values keep automatic closing disabled. Loading defaults does not persist settings. Disabling automatic submission leaves the saved automatic-close preference intact but makes it ineffective.
 
 ### Default prompt
 
@@ -308,7 +310,7 @@ Run the cases relevant to a change and report which cases were verified in the c
 - Log out of ChatGPT or block the composer, dispatch again, and confirm no prompt is submitted, the tab remains open, and a red `!` badge or error appears.
 - Open an unrelated ChatGPT tab and confirm it does not auto-submit anything.
 - Disable automatic submission and confirm the correct prompt is prefilled but not submitted.
-- Enable automatic closing and confirm the background tab remains open on temporary paths such as `/c/local-chatgpt%3A<UUID>`, then closes after a canonical `/c/<UUID>` path appears while the enabled form-scoped Stop button is present, without waiting for assistant text or the full response. Reopen that exact conversation and verify it loads with a non-empty response.
+- In a fresh profile, confirm automatic closing is checked. Save it off, reload Options, and confirm it remains off. Disable automatic submission and confirm the closing control is disabled without losing its saved preference. With automatic submission on and the default automatic closing on, confirm the background tab remains open on temporary paths such as `/c/local-chatgpt%3A<UUID>`, then closes after a canonical `/c/<UUID>` path appears while the enabled form-scoped Stop button is present, without waiting for assistant text or the full response. Reopen that exact conversation and verify it loads with a non-empty response.
 - On the observed ChatGPT UI with a form-scoped contenteditable textbox and no composer ID, confirm one submission and automatic closing after a canonical `/c/<UUID>` path and new non-empty assistant markdown appear, even without a recognized Stop button or finalized message IDs.
 - Repeat with no deep-link prefill and confirm fallback insertion is recognized by ChatGPT, submitted once, and followed by early closing and successful reopening.
 - Confirm user text and empty assistant placeholders do not trigger closing; temporary conversation paths without a verified streaming-completion transition remain open.

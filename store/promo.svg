@@ -21,7 +21,7 @@
   <g stroke="#2563EB" stroke-width="5" fill="none" stroke-linecap="round">
     <path d="m89 181-8 8a10 10 0 0 0 14 14l9-9m6-5 8-8a10 10 0 0 0-14-14l-9 9m-5 14 17-17"/>
   </g>
-  <path d="M192 141h50m-13-13 14 13-14 13" stroke="#FFF" stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M207 141h50m-13-13 14 13-14 13" stroke="#FFF" stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
   <g transform="translate(270 83) scale(.86)">
     <rect width="128" height="128" rx="28" fill="#2563EB" stroke="#93C5FD" stroke-width="2"/>
     <path d="M31 32h66a11 11 0 0 1 11 11v38a11 11 0 0 1-11 11H63L42 108V92H31a11 11 0 0 1-11-11V43a11 11 0 0 1 11-11Z" fill="none" stroke="#FFF" stroke-width="9" stroke-linejoin="round"/>

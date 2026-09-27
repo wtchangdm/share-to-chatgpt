@@ -198,9 +198,22 @@ test("missing or invalid persisted settings fall back safely", () => {
       placement: "prepend",
       stripTrackingParameters: true,
       autoSubmit: true,
-      autoClose: false
+      autoClose: true
     }
   );
+});
+
+test("automatic closing defaults on only when absent and preserves explicit choices", () => {
+  assert.equal(DEFAULT_SETTINGS.autoClose, true);
+  for (const settings of [undefined, {}, { autoSubmit: false }]) {
+    assert.equal(normalizeSettings(settings).autoClose, true);
+  }
+  for (const autoClose of [true, false]) {
+    assert.equal(normalizeSettings({ autoClose }).autoClose, autoClose);
+  }
+  for (const invalid of [null, "true", "false", 0, 1]) {
+    assert.equal(normalizeSettings({ autoClose: invalid as unknown as boolean }).autoClose, false);
+  }
 });
 
 test("automatic submission and closing settings are restored", () => {

@@ -30,7 +30,7 @@ Temporary dispatch payloads are removed after completion, final failure, or clos
 
 The prompt-bearing navigation URL may be retained in browser history or by ChatGPT. Removing local extension data, uninstalling the extension, or closing a ChatGPT tab does not delete browser history or ChatGPT conversations. Manage those separately through Chrome and ChatGPT.
 
-You can disable automatic submission, automatic closing, or tracking-parameter cleanup in Options. Automatic submission is on by default; automatic closing is off by default. Do not share confidential URLs, private document links, passwords, access tokens, or sensitive prompt text. Tracking-parameter cleanup removes only a fixed list of tracking parameters; it is not a sensitive-data scrubber. Local extension storage is not a password vault and the extension does not add its own encryption to that storage.
+You can disable automatic submission, automatic closing, or tracking-parameter cleanup in Options. Automatic submission and automatic closing are on by default when no preferences have been saved. Existing saved on/off choices are preserved. Automatic closing requires automatic submission and does not wait for the full answer or guarantee continued generation. Do not share confidential URLs, private document links, passwords, access tokens, or sensitive prompt text. Tracking-parameter cleanup removes only a fixed list of tracking parameters; it is not a sensitive-data scrubber. Local extension storage is not a password vault and the extension does not add its own encryption to that storage.
 
 ## Limited Use
 

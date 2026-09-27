@@ -28,7 +28,7 @@ Make it your workflow:
 - Place the prompt before or after the URL, preserving line breaks.
 - Remove common tracking parameters while keeping other URL data. Turn cleanup off for signed or single-use links if needed.
 - Automatically submit the verified prompt, or turn submission off to leave it in the composer.
-- Optionally close the ChatGPT tab after a conversation URL is assigned and a response starts. Automatic closing is off by default and does not wait for the full answer or guarantee continued generation.
+- Optionally close the ChatGPT tab after a conversation URL is assigned and a response starts. Automatic closing is on by default for unsaved settings, can be disabled in Options, and does not wait for the full answer or guarantee continued generation.
 
 Getting started:
 1. Install and pin the extension.
@@ -93,7 +93,7 @@ Publish `PRIVACY.md` at a stable, publicly readable HTTPS URL and enter that URL
 
 Requires Chrome 120+ and the reviewer's own signed-in ChatGPT account. No extension account, API key, or developer credentials are required. Do not supply a personal ChatGPT password or cookies.
 
-1. Sign in to https://chatgpt.com/ normally. Open extension Options and set Prompt to `Reply with only OK.` to keep the test bounded. Leave automatic submission on and automatic closing off.
+1. Sign in to https://chatgpt.com/ normally. Open extension Options and set Prompt to `Reply with only OK.` to keep the test bounded. Leave automatic submission on and turn automatic closing off (both default to on).
 2. Open https://example.com/ and click the extension toolbar button once. The source tab should stay selected. One background ChatGPT tab should open and submit one prompt containing the instruction and URL. It should remain open.
 3. Use the link context menu on a public link, then test the configured shortcut with and without hovering a link. Each invocation should share the intended URL once. Chrome may reserve shortcuts; assign an available shortcut at chrome://extensions/shortcuts if needed.
 4. Turn automatic submission off and share again. The prompt should be prefilled, not submitted. Navigation still sends the prompt to ChatGPT.
