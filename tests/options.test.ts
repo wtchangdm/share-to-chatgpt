@@ -9,15 +9,17 @@ import {
 } from "../src/options-model";
 import { DEFAULT_SETTINGS, normalizeSettings } from "../src/prompt";
 
-const defaultPrompt = `Start with a brief summary of the key takeaways, then analyze the page.
+const defaultPrompt = `Read the linked page. Start with a brief summary of its main point, key findings, and significance.
 
-Distinguish what is established, what the page asserts or interprets, and what is speculative. Assess the strongest evidence and important caveats, and include meaningful counterarguments or missing context when relevant. Add external context or verification only when it materially improves understanding, using reliable sources and citing them.
+Then add only analysis that materially improves my understanding. Consider what is established versus claimed, interpreted, or speculative; the strongest evidence and important limitations; meaningful counterarguments or missing context; and consequential, surprising, overstated, or easily misunderstood points. These are evaluation criteria, not required sections. Include a point only if it changes the takeaway, confidence in it, or understanding of how or why it matters.
 
-Explain why it matters in context, and call out anything important, surprising, overstated, weakly supported, or easy to misunderstand. Suggest worthwhile follow-up reading only when useful.
+Use reliable external sources when needed to verify a consequential claim or resolve an important gap, and cite sources used. Disclose material limits on access to the page rather than inventing its contents.
 
-Finally, tell me why this may matter to me, what I can learn from it, and recommend reading the original only if it adds substantial value beyond the summary.
+Briefly include personal relevance or a useful lesson when it adds something specific, using what you know about me without forcing a connection. Recommend the original or follow-up reading only when you can identify substantial value beyond this briefing.
 
-Keep the depth proportional to the material. Don't manufacture false balance or turn a simple page into a long essay.`;
+Keep the depth proportional to the material. Preserve central findings, essential explanations, and caveats that change the takeaway. Cut low-value or repetitive points rather than compressing useful explanations into dense prose.
+
+Use readable paragraphs or a short list, merging related points. Omit inapplicable categories, generic caveats, repeated conclusions, process preambles, and offers to continue. Do not manufacture false balance.`;
 
 function optionsFields(): OptionsFields {
   return {
