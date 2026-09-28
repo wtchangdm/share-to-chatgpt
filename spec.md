@@ -50,7 +50,7 @@ Settings are stored under `settings` in `chrome.storage.local`.
 | `autoSubmit` | `boolean` | `true` | Whether the verified prompt is submitted automatically. |
 | `autoClose` | `boolean` | `true` | Whether the target tab closes after ChatGPT assigns a canonical conversation URL and starts responding. Effective only when `autoSubmit` is enabled. |
 
-A blank Prompt value produces only the cleaned or original target URL. Non-empty Prompt text and the URL are separated by one space. Surrounding whitespace is trimmed, but internal line breaks, blank lines, and indentation are preserved. CRLF and CR line endings are normalized to LF, not spaces.
+A blank Prompt value produces only the cleaned or original target URL. Non-empty Prompt text before the URL is separated from it by one space. When placed after the URL, it is separated by two LF line breaks (one blank line): `<URL>\n\n<Prompt>`. Surrounding whitespace is trimmed, but internal line breaks, blank lines, and indentation are preserved. CRLF and CR line endings are normalized to LF, not spaces.
 
 The storage key remains `optionalText` for compatibility with saved settings. Missing or non-string values use the default prompt; existing string values, including empty or whitespace-only strings, are preserved. Loading defaults does not write settings or overwrite saved preferences.
 
@@ -303,7 +303,7 @@ Run the cases relevant to a change and report which cases were verified in the c
 - With link cleanup enabled, send a URL containing `utm_source`, `fbclid`, and an unrelated query parameter; verify the listed tracking parameters are absent while the unrelated parameter and fragment remain.
 - Disable link cleanup, send the same URL, and verify it remains unchanged.
 - Save prepend text in **Options**, send a page, and verify `text + space + cleaned URL`.
-- Save append text, send a link, and verify `cleaned URL + space + text`.
+- Save append text, send a link, and verify `cleaned URL + two LF line breaks + text`.
 - In a fresh extension profile, confirm Options displays the default Prompt. Clear it, save, reopen Options, and confirm it stays empty and sharing sends only the URL. Existing custom prompts must also remain unchanged after reload.
 - Save Prompt text with multiple paragraphs, blank lines, and single line breaks; verify they survive both prepend and append, deep-link prefill, and fallback insertion. In the current contenteditable editor, verify direct paragraphs and empty-paragraph placeholders compare as logical lines, without accepting missing blank lines or collapsed text. Repeat with automatic submission disabled, then enabled, verifying one correctly formatted message and no collapsed paragraphs. If exact formatting cannot be verified, confirm the tab stays open without submission.
 - Trigger two dispatches close together and verify each target tab submits its own prompt once.

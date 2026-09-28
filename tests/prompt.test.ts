@@ -162,11 +162,14 @@ test("optional text can be prepended without creating a multiline prompt", () =>
   );
 });
 
-test("optional text can be appended without creating a multiline prompt", () => {
-  assert.equal(
-    buildPrompt(pageUrl, { optionalText: "Explain the risks", placement: "append" }),
-    `${pageUrl} Explain the risks`
-  );
+test("appended optional text is separated from the URL by two newlines", () => {
+  const prompt = buildPrompt(pageUrl, {
+    optionalText: " \nExplain the risks\n ",
+    placement: "append"
+  });
+  const expected = `${pageUrl}\n\nExplain the risks`;
+  assert.equal(prompt, expected);
+  assert.equal(new URL(buildChatGPTUrl(prompt)).searchParams.get("prompt"), expected);
 });
 
 for (const placement of ["prepend", "append"] as const) {
@@ -174,7 +177,7 @@ for (const placement of ["prepend", "append"] as const) {
     test(`optional text preserves paragraphs with ${JSON.stringify(newline)} (${placement})`, () => {
       const optionalText = `  Summarize.${newline}${newline}Assess evidence.${newline}  Keep indentation.  `;
       const text = "Summarize.\n\nAssess evidence.\n  Keep indentation.";
-      const expected = placement === "prepend" ? `${text} ${pageUrl}` : `${pageUrl} ${text}`;
+      const expected = placement === "prepend" ? `${text} ${pageUrl}` : `${pageUrl}\n\n${text}`;
       const prompt = buildPrompt(pageUrl, { optionalText, placement });
 
       assert.equal(prompt, expected);
@@ -183,12 +186,13 @@ for (const placement of ["prepend", "append"] as const) {
   }
 }
 
-test("whitespace-only optional text produces only the URL", () => {
-  assert.equal(
-    buildPrompt(pageUrl, { optionalText: " \r\n\n\t ", placement: "prepend" }),
-    pageUrl
-  );
-});
+for (const placement of ["prepend", "append"] as const) {
+  test(`empty or whitespace-only optional text produces only the URL (${placement})`, () => {
+    for (const optionalText of ["", " \r\n\n\t "]) {
+      assert.equal(buildPrompt(pageUrl, { optionalText, placement }), pageUrl);
+    }
+  });
+}
 
 test("missing or invalid persisted settings fall back safely", () => {
   assert.deepEqual(

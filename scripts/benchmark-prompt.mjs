@@ -13,6 +13,12 @@ const scenarios = [
     name: "multiline",
     text: multiline,
     expected: `${multiline} ${url}`
+  },
+  {
+    name: "append",
+    text: multiline,
+    placement: "append",
+    expected: `${url}\n\n${multiline}`
   }
 ];
 
@@ -42,7 +48,7 @@ function runIterations(settings, iterations) {
 const results = [];
 let checksum = 0;
 for (const scenario of scenarios) {
-  const settings = { optionalText: scenario.text, placement: "prepend" };
+  const settings = { optionalText: scenario.text, placement: scenario.placement ?? "prepend" };
   assert.equal(buildPrompt(url, settings), scenario.expected, scenario.name);
   checksum += runIterations(settings, WARMUP_ITERATIONS);
   const samples = [];

@@ -1,5 +1,5 @@
 import { composerHasPrompt, insertPrompt } from "../../src/content";
-import { DEFAULT_SETTINGS } from "../../src/prompt";
+import { buildPrompt, DEFAULT_SETTINGS } from "../../src/prompt";
 import { readComposerText } from "../../src/selectors";
 
 // Run in real Chromium via scripts/test-composer-browser.mjs, not Node's DOM mocks.
@@ -68,6 +68,10 @@ export function checkComposerInsertion(): { checks: number; browser: string } {
           try {
             // First use, replacement, clearing, and reuse exercise selection/reset behavior.
             for (const prompt of [
+              buildPrompt("https://example.com/article", {
+                optionalText: "Explain the risks.",
+                placement: "append"
+              }),
               "First paragraph.\n\nSecond paragraph.\nThird line.",
               "Replacement.\n\nLiteral <b>text</b> & symbols.",
               "",

@@ -57,7 +57,7 @@ Reload the extension from `chrome://extensions` after rebuilding it.
 
 | Option | Default | Behavior |
 | --- | --- | --- |
-| Prompt | Summary and analysis instructions | Added before or after the URL. Can be empty to send only the URL. Preserves line breaks and blank lines; trims surrounding whitespace. |
+| Prompt | Summary and analysis instructions | Added before the URL with one space, or after it with two line breaks (one blank line). Can be empty to send only the URL. Preserves line breaks and blank lines; trims surrounding whitespace. |
 | Remove common tracking parameters from shared URLs | On | Removes the known parameters listed below while preserving other query parameters and fragments. |
 | Automatically submit the prompt | On | Turn off to prefill the composer without submitting. |
 | Close the ChatGPT tab after ChatGPT assigns a conversation URL and starts responding | On | Closes after a canonical `/c/<UUID>` URL appears together with either ChatGPT's enabled form-scoped Stop button or a new non-empty assistant response. Does not wait for the full answer. If the canonical URL is unavailable, response completion is the fallback. Waits up to approximately two minutes. Requires automatic submission. |

@@ -132,7 +132,7 @@ export function buildPrompt(
   }
 
   return settings.placement === "append"
-    ? `${targetUrl} ${optionalText}`
+    ? `${targetUrl}\n\n${optionalText}`
     : `${optionalText} ${targetUrl}`;
 }
 
