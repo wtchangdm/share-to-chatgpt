@@ -10,7 +10,7 @@ The original bookmarklet workflow is:
 javascript:(()=>{window.open(`https://chatgpt.com/?prompt=${encodeURIComponent(location.href)}`,"_blank","noopener,noreferrer")})()
 ```
 
-With default settings, the shared prompt is the [default analysis text](#default-prompt), one space, and the target URL after the conservative tracking-parameter cleanup defined below. A URL without a listed tracking parameter remains byte-for-byte unchanged. When the Prompt setting is empty, only the URL is sent, and the ChatGPT deep link is:
+With default settings, the shared prompt is the target URL after the conservative tracking-parameter cleanup defined below, two LF line breaks (one blank line), and the [default analysis text](#default-prompt). A URL without a listed tracking parameter remains byte-for-byte unchanged. When the Prompt setting is empty, only the URL is sent, and the ChatGPT deep link is:
 
 ```text
 https://chatgpt.com/?prompt=<encoded cleaned target URL>
@@ -45,12 +45,14 @@ Settings are stored under `settings` in `chrome.storage.local`.
 | Field | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `optionalText` | `string` | [Default prompt](#default-prompt) | The user-editable Prompt text added to the target URL; may be empty. |
-| `placement` | `"prepend" \| "append"` | `"prepend"` | Whether Prompt text appears before or after the URL. |
+| `placement` | `"prepend" \| "append"` | `"append"` | Whether Prompt text appears before or after the URL. |
 | `stripTrackingParameters` | `boolean` | `true` | Whether known tracking parameters are removed before prompt construction. |
 | `autoSubmit` | `boolean` | `true` | Whether the verified prompt is submitted automatically. |
 | `autoClose` | `boolean` | `true` | Whether the target tab closes after ChatGPT assigns a canonical conversation URL and starts responding. Effective only when `autoSubmit` is enabled. |
 
 A blank Prompt value produces only the cleaned or original target URL. Non-empty Prompt text before the URL is separated from it by one space. When placed after the URL, it is separated by two LF line breaks (one blank line): `<URL>\n\n<Prompt>`. Surrounding whitespace is trimmed, but internal line breaks, blank lines, and indentation are preserved. CRLF and CR line endings are normalized to LF, not spaces.
+
+Placement defaults to `"append"` when missing or invalid; existing saved `"prepend"` and `"append"` choices are preserved without writes on load.
 
 The storage key remains `optionalText` for compatibility with saved settings. Missing or non-string values use the default prompt; existing string values, including empty or whitespace-only strings, are preserved. Loading defaults does not write settings or overwrite saved preferences.
 

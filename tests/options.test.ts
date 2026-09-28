@@ -64,6 +64,37 @@ test("prompt defaults load without overwriting saved text or an intentionally em
   assert.equal(fields.optionalText.value, defaultPrompt);
 });
 
+test("placement defaults after the link without writes and preserves saved choices", async () => {
+  let stored: Record<string, unknown> = {};
+  const storage: SettingsStorage = {
+    async get() { return stored; },
+    async set(items) { stored = items; }
+  };
+  const fields = optionsFields();
+  assert.equal(DEFAULT_SETTINGS.placement, "append");
+  for (const settings of [undefined, {}]) {
+    assert.equal(normalizeSettings(settings).placement, "append");
+  }
+  assert.equal(await loadOptions(fields, storage), true);
+  assert.equal(fields.placement.value, "append");
+  assert.deepEqual(stored, {});
+
+  for (const placement of ["prepend", "append"] as const) {
+    fields.placement.value = placement;
+    assert.equal(await saveOptions(fields, storage, () => 0), true);
+    for (let reload = 0; reload < 2; reload++) {
+      const reopened = optionsFields();
+      assert.equal(await loadOptions(reopened, storage), true);
+      assert.equal(reopened.placement.value, placement);
+    }
+  }
+
+  stored = {};
+  assert.equal(await loadOptions(fields, storage), true);
+  assert.equal(fields.placement.value, "append");
+  assert.deepEqual(stored, {});
+});
+
 test("automatic closing defaults load without writes and preserve saved choices across reloads", async () => {
   let stored: Record<string, unknown> = {};
   const storage: SettingsStorage = {

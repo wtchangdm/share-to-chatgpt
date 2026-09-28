@@ -35,7 +35,7 @@ const urlOnlySettings = { ...DEFAULT_SETTINGS, optionalText: "" };
 test("the default prompt and deep link preserve non-tracking query parameters", () => {
   const prompt = buildPrompt(pageUrl, DEFAULT_SETTINGS);
 
-  const expected = `${DEFAULT_SETTINGS.optionalText} ${pageUrl}`;
+  const expected = `${pageUrl}\n\n${DEFAULT_SETTINGS.optionalText}`;
   assert.equal(prompt, expected);
   assert.equal(
     buildChatGPTUrl(prompt),
@@ -199,7 +199,7 @@ test("missing or invalid persisted settings fall back safely", () => {
     normalizeSettings({ optionalText: "Question", placement: "invalid" as "append" }),
     {
       optionalText: "Question",
-      placement: "prepend",
+      placement: "append",
       stripTrackingParameters: true,
       autoSubmit: true,
       autoClose: true
@@ -225,7 +225,7 @@ test("automatic submission and closing settings are restored", () => {
     normalizeSettings({ autoSubmit: false, autoClose: true }),
     {
       optionalText: DEFAULT_SETTINGS.optionalText,
-      placement: "prepend",
+      placement: "append",
       stripTrackingParameters: true,
       autoSubmit: false,
       autoClose: true

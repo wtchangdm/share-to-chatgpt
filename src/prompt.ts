@@ -12,7 +12,7 @@ Briefly include personal relevance or a useful lesson when it adds something spe
 Keep the depth proportional to the material. Preserve central findings, essential explanations, and caveats that change the takeaway. Cut low-value or repetitive points rather than compressing useful explanations into dense prose.
 
 Use readable paragraphs or a short list, merging related points. Omit inapplicable categories, generic caveats, repeated conclusions, process preambles, and offers to continue. Do not manufacture false balance.`,
-  placement: "prepend",
+  placement: "append",
   stripTrackingParameters: true,
   autoSubmit: true,
   autoClose: true
@@ -111,7 +111,9 @@ export function normalizeSettings(value: Partial<Settings> | undefined): Setting
     optionalText: typeof value?.optionalText === "string"
       ? value.optionalText
       : DEFAULT_SETTINGS.optionalText,
-    placement: value?.placement === "append" ? "append" : "prepend",
+    placement: value?.placement === "prepend" || value?.placement === "append"
+      ? value.placement
+      : DEFAULT_SETTINGS.placement,
     stripTrackingParameters: value?.stripTrackingParameters !== false,
     autoSubmit: value?.autoSubmit !== false,
     autoClose: value?.autoClose === undefined ? DEFAULT_SETTINGS.autoClose : value.autoClose === true

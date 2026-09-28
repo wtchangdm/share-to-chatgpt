@@ -172,7 +172,7 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
     assert.equal(updatedTabs[0]?.dispatchAtNavigation?.status, "pending");
     assert.equal(
       updatedTabs[0]?.dispatchAtNavigation?.prompt,
-      `${DEFAULT_SETTINGS.optionalText} https://example.com/article?item=42#details`
+      `https://example.com/article?item=42#details\n\n${DEFAULT_SETTINGS.optionalText}`
     );
 
     const pending = dispatchEntries(session)[0];
