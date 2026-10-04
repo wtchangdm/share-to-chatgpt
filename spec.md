@@ -69,10 +69,14 @@ Use reliable external sources when needed to verify a consequential claim or res
 
 Briefly include personal relevance or a useful lesson when it adds something specific, using what you know about me without forcing a connection. Recommend the original or follow-up reading only when you can identify substantial value beyond this briefing.
 
+Do not create or update memories or assumptions about me from this link or summary; base any memory or personal-context updates on personal information I provide in substantive follow-up discussion.
+
 Keep the depth proportional to the material. Preserve central findings, essential explanations, and caveats that change the takeaway. Cut low-value or repetitive points rather than compressing useful explanations into dense prose.
 
 Use readable paragraphs or a short list, merging related points. Omit inapplicable categories, generic caveats, repeated conclusions, process preambles, and offers to continue. Do not manufacture false balance.
 ```
+
+The memory sentence is a model instruction, not an enforced privacy boundary. It distinguishes using existing personal context for relevance from deriving new personal context from a shared article. Substantive follow-up must provide personal information; merely asking another question about the article is not evidence of a lasting interest or belief. The extension does not control ChatGPT Memory, reference-chat-history settings, or retention, and the link and summary remain part of the current conversation. See the [README privacy guidance](README.md#privacy-and-compatibility).
 
 ### Tracking-parameter cleanup
 

@@ -64,7 +64,7 @@ Reload the extension from `chrome://extensions` after rebuilding it.
 
 Automatic closing defaults to on when no value has been saved. Existing saved on/off choices are preserved. Turn it off in Options if you want the ChatGPT tab to stay open.
 
-The default prompt asks for a brief summary, evidence-aware analysis, caveats, and personal relevance. It applies when no prompt has been saved; existing saved prompts, including empty ones, remain unchanged. Placement defaults to after the URL; existing saved placement choices remain unchanged. The exact default is documented in [spec.md](spec.md#default-prompt).
+The default prompt asks for a brief summary, evidence-aware analysis, caveats, and personal relevance. It also asks ChatGPT not to derive memories or assumptions about you from the link or summary, reserving later updates for personal information you provide in substantive follow-up discussion. This is guidance, not enforced memory isolation; see [Privacy and compatibility](#privacy-and-compatibility). It applies when no prompt has been saved; existing saved prompts, including empty ones, remain unchanged. Placement defaults to after the URL; existing saved placement choices remain unchanged. The exact default is documented in [spec.md](spec.md#default-prompt).
 
 With link cleanup enabled, the extension removes these exact, case-sensitive parameter names from HTTP and HTTPS URLs:
 
@@ -111,6 +111,8 @@ Generated scripts are written to `dist/`; do not edit them directly.
 ## Privacy and compatibility
 
 Read the [privacy policy](PRIVACY.md) for data use, retention, and your choices. Sharing sends the URL and prompt to ChatGPT even when automatic submission is disabled, because they are included in the navigation URL. Browser history and ChatGPT may retain that information. Do not share confidential links or sensitive prompt text; tracking cleanup is not a sensitive-data scrubber.
+
+Prompt instructions cannot guarantee exclusion from ChatGPT [Memory or reference chat history](https://help.openai.com/en/articles/8590148-memory-in-chatgpt), and the article remains in the current conversation's context. For stronger control, use ChatGPT's Memory settings or manually start a [Temporary Chat](https://help.openai.com/en/articles/8914046-temporary-chat-in-chatgpt), which does not create or update memories while temporary. This extension opens regular chats; it does not enable Temporary Chat or change your ChatGPT settings.
 
 Settings and dispatch state stay in local Chrome extension storage. The constructed prompt—including the page or link URL—is sent only to `chatgpt.com` through normal page navigation and is not sent to any other service. The shortcut inspects the active page only when pressed, using Chrome's temporary `activeTab` access; the extension has no persistent all-sites access.
 
