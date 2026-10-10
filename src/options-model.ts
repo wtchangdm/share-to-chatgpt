@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, normalizeSettings } from "./prompt";
+import { normalizeSettings } from "./prompt";
 import type { OptionalTextPlacement, Settings } from "./types";
 
 const SETTINGS_KEY = "settings";
@@ -28,36 +28,6 @@ export function syncAutoCloseAvailability(fields: OptionsFields): void {
   fields.autoClose.disabled = !fields.autoSubmit.checked;
 }
 
-function applySettings(fields: OptionsFields, settings: Settings): void {
-  fields.optionalText.value = settings.optionalText;
-  fields.placement.value = settings.placement;
-  fields.stripTrackingParameters.checked = settings.stripTrackingParameters;
-  fields.autoSubmit.checked = settings.autoSubmit;
-  fields.autoClose.checked = settings.autoClose;
-  syncAutoCloseAvailability(fields);
-}
-
-export async function resetOptions(
-  fields: OptionsFields,
-  storage: SettingsStorage,
-  scheduleClear: ScheduleClear,
-  reportError: ErrorReporter = defaultErrorReporter
-): Promise<boolean> {
-  try {
-    await storage.set({ [SETTINGS_KEY]: { ...DEFAULT_SETTINGS } });
-    applySettings(fields, DEFAULT_SETTINGS);
-    fields.status.textContent = "Defaults restored.";
-    scheduleClear(() => {
-      fields.status.textContent = "";
-    }, 2_000);
-    return true;
-  } catch (error) {
-    fields.status.textContent = "Could not reset settings.";
-    reportError("[Share to ChatGPT] Could not reset settings.", error);
-    return false;
-  }
-}
-
 export async function loadOptions(
   fields: OptionsFields,
   storage: SettingsStorage,
@@ -67,7 +37,12 @@ export async function loadOptions(
     const result = await storage.get(SETTINGS_KEY);
     const settings = normalizeSettings(result[SETTINGS_KEY] as Partial<Settings> | undefined);
 
-    applySettings(fields, settings);
+    fields.optionalText.value = settings.optionalText;
+    fields.placement.value = settings.placement;
+    fields.stripTrackingParameters.checked = settings.stripTrackingParameters;
+    fields.autoSubmit.checked = settings.autoSubmit;
+    fields.autoClose.checked = settings.autoClose;
+    syncAutoCloseAvailability(fields);
     return true;
   } catch (error) {
     syncAutoCloseAvailability(fields);

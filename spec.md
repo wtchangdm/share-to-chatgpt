@@ -58,26 +58,22 @@ The storage key remains `optionalText` for compatibility with saved settings. Mi
 
 Automatic closing defaults to on only when `autoClose` is absent or undefined. Saved boolean values, including `false`, are preserved; other invalid values keep automatic closing disabled. Loading defaults does not persist settings. Disabling automatic submission leaves the saved automatic-close preference intact but makes it ineffective.
 
-The Options **Reset to defaults** button immediately writes all current default settings under the existing `settings` key and updates every form field, including automatic-close availability. No separate Save is required. It replaces saved preferences and unsaved edits but leaves unrelated local storage and session dispatch state untouched. Repeated resets are safe. A failed write leaves the fields and saved preferences unchanged, reports a local error, and shows `Could not reset settings.`; success shows `Defaults restored.` for approximately two seconds.
-
 ### Default prompt
 
 ```text
 Read the linked page. Start with a brief summary of its main point, key findings, and significance.
 
-Add only analysis that materially improves my understanding: distinguish established facts from claims, interpretations, and speculation; assess the strongest evidence, important limitations, meaningful counterarguments, and missing context. Include consequential or easily misunderstood points only when they change the takeaway, confidence, or understanding of how or why it matters. These are evaluation criteria, not required sections. Do not manufacture false balance.
+Then add only analysis that materially improves my understanding. Consider what is established versus claimed, interpreted, or speculative; the strongest evidence and important limitations; meaningful counterarguments or missing context; and consequential, surprising, overstated, or easily misunderstood points. These are evaluation criteria, not required sections. Include a point only if it changes the takeaway, confidence in it, or understanding of how or why it matters.
 
-Use reliable external sources when needed to verify consequential claims or fill important gaps, and cite sources near the claims or visuals they support. Disclose material access limits rather than inventing the page's contents.
+Use reliable external sources when needed to verify a consequential claim or resolve an important gap, and cite sources used. Disclose material limits on access to the page rather than inventing its contents.
 
-Proactively choose the clearest supported format: readable prose for straightforward points; compact tables or side-by-side layouts for comparisons on shared criteria; charts for sourced quantitative patterns; diagrams or timelines for mechanisms, dependencies, or event order. Use only formats that add clarity, keeping key comparisons visible together. Mark missing or non-comparable information. Preserve relevant units, timeframes, baselines, and uncertainty; label assumptions and never invent data, scores, or causal relationships.
+Briefly include personal relevance or a useful lesson when it adds something specific, using what you know about me without forcing a connection. Recommend the original or follow-up reading only when you can identify substantial value beyond this briefing.
 
-Use native in-conversation interactivity when exploring relationships or changing inputs or scenarios adds insight. Keep the main takeaway and essential caveats visible without interaction. If unavailable, use text, tables, or static diagrams. Avoid decorative visuals, unnecessary controls, duplicate explanations, and separate apps or raw UI code.
+Do not create or update memories or assumptions about me from this link or summary; base any memory or personal-context updates on personal information I provide in substantive follow-up discussion.
 
-Include personal relevance or a useful lesson only when specific. Recommend further reading only when it offers substantial value beyond the briefing.
+Keep the depth proportional to the material. Preserve central findings, essential explanations, and caveats that change the takeaway. Cut low-value or repetitive points rather than compressing useful explanations into dense prose.
 
-Do not create or update memories or assumptions about me from this link or summary; base any personal-context updates on personal information I provide in substantive follow-up discussion.
-
-Follow my existing language and style preferences. Keep depth proportional, preserving essential explanations and caveats. Cut low-value material rather than making useful explanations dense. Omit generic caveats, repeated conclusions, process preambles, and offers to continue.
+Use readable paragraphs or a short list, merging related points. Omit inapplicable categories, generic caveats, repeated conclusions, process preambles, and offers to continue. Do not manufacture false balance.
 ```
 
 The memory sentence is a model instruction, not an enforced privacy boundary. It distinguishes using existing personal context for relevance from deriving new personal context from a shared article. Substantive follow-up must provide personal information; merely asking another question about the article is not evidence of a lasting interest or belief. The extension does not control ChatGPT Memory, reference-chat-history settings, or retention, and the link and summary remain part of the current conversation. See the [README privacy guidance](README.md#privacy-and-compatibility).
@@ -326,7 +322,6 @@ Run the cases relevant to a change and report which cases were verified in the c
 - On the observed ChatGPT UI with a form-scoped contenteditable textbox and no composer ID, confirm one submission and automatic closing after a canonical `/c/<UUID>` path and new non-empty assistant markdown appear, even without a recognized Stop button or finalized message IDs.
 - Repeat with no deep-link prefill and confirm fallback insertion is recognized by ChatGPT, submitted once, and followed by early closing and successful reopening.
 - Confirm user text and empty assistant placeholders do not trigger closing; temporary conversation paths without a verified streaming-completion transition remain open.
-- In Options, change and save every setting, make unsaved edits, then choose **Reset to defaults**. Confirm all fields return to current defaults, automatic closing is enabled, and reopening retains defaults without a separate Save. Repeat reset and confirm unrelated local data and active dispatches remain intact.
 - Reload the extension and confirm automation settings retain their saved values.
 
 ## Inherently fragile behavior

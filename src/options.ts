@@ -1,6 +1,5 @@
 import {
   loadOptions,
-  resetOptions,
   saveOptions,
   syncAutoCloseAvailability,
   type OptionsFields
@@ -46,11 +45,6 @@ const form = getRequiredElement("#settings-form", HTMLFormElement);
 form.addEventListener("submit", (event) => {
   event.preventDefault();
   void saveOptions(fields, chrome.storage.local, window.setTimeout.bind(window));
-});
-
-const resetButton = getRequiredElement("#reset-settings", HTMLButtonElement);
-resetButton.addEventListener("click", () => {
-  void resetOptions(fields, chrome.storage.local, window.setTimeout.bind(window));
 });
 
 void loadOptions(fields, chrome.storage.local);
