@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   loadOptions,
-  resetPrompt,
+  resetOptions,
   saveOptions,
   type OptionsFields,
   type SettingsStorage
@@ -67,39 +67,70 @@ test("prompt defaults load without overwriting saved text or an intentionally em
   assert.equal(fields.optionalText.value, defaultPrompt);
 });
 
-test("reset prompt restores the latest default without saving or changing other settings", async () => {
-  let stored: Record<string, unknown> = {
-    settings: {
-      optionalText: "Custom prompt",
-      placement: "prepend",
-      stripTrackingParameters: false,
-      autoSubmit: false,
-      autoClose: false
-    }
-  };
-  let writes = 0;
+test("reset persists every default, preserves unrelated storage, and survives repeated use", async () => {
+  let stored: Record<string, unknown> = { unrelated: "keep", settings: { autoSubmit: false } };
   const storage: SettingsStorage = {
     async get() { return stored; },
-    async set(items) { stored = items; writes++; }
+    async set(items) { stored = { ...stored, ...items }; }
   };
   const fields = optionsFields();
-  assert.equal(await loadOptions(fields, storage), true);
-  const originalFields = structuredClone(fields);
-
+  await loadOptions(fields, storage);
+  fields.optionalText.value = "Unsaved draft";
   for (let reset = 0; reset < 2; reset++) {
-    fields.optionalText.value = reset === 0 ? "Edited prompt" : "";
-    resetPrompt(fields);
-    assert.deepEqual(fields, { ...originalFields, optionalText: { value: defaultPrompt } });
-    assert.equal(writes, 0);
+    let clearStatus: (() => void) | undefined;
+    assert.equal(await resetOptions(fields, storage, (callback, delay) => {
+      assert.equal(delay, 2_000);
+      clearStatus = callback;
+    }), true);
+    assert.deepEqual(stored, { unrelated: "keep", settings: DEFAULT_SETTINGS });
+    assert.equal(fields.optionalText.value, defaultPrompt);
+    assert.equal(fields.placement.value, "append");
+    assert.equal(fields.stripTrackingParameters.checked, true);
+    assert.equal(fields.autoSubmit.checked, true);
+    assert.equal(fields.autoClose.checked, true);
+    assert.equal(fields.autoClose.disabled, false);
+    assert.equal(fields.status.textContent, "Defaults restored.");
+    clearStatus?.();
+    assert.equal(fields.status.textContent, "");
+    const reopened = optionsFields();
+    assert.equal(await loadOptions(reopened, storage), true);
+    assert.deepEqual(reopened, fields);
   }
+});
 
-  const reopened = optionsFields();
-  assert.equal(await loadOptions(reopened, storage), true);
-  assert.equal(reopened.optionalText.value, "Custom prompt");
-  assert.equal(await saveOptions(fields, storage, () => 0), true);
-  assert.equal(writes, 1);
-  assert.equal(await loadOptions(reopened, storage), true);
-  assert.equal(reopened.optionalText.value, defaultPrompt);
+test("failed reset retains fields and saved settings, and can recover", async () => {
+  const fields = optionsFields();
+  fields.optionalText.value = "Keep my draft";
+  fields.autoSubmit.checked = false;
+  fields.autoClose.disabled = true;
+  const before = structuredClone(fields);
+  let fail = true;
+  let saved: Record<string, unknown> | undefined;
+  const failure = new Error("Storage unavailable");
+  const errors: unknown[] = [];
+  const storage: SettingsStorage = {
+    async get() { return {}; },
+    async set(items) {
+      if (fail) throw failure;
+      saved = items;
+    }
+  };
+  assert.equal(await resetOptions(fields, storage, () => {
+    assert.fail("Failed reset must not schedule success cleanup");
+  }, (_message, error) => errors.push(error)), false);
+  assert.equal(saved, undefined);
+  assert.deepEqual(errors, [failure]);
+  assert.deepEqual(fields, { ...before, status: { textContent: "Could not reset settings." } });
+  fail = false;
+  assert.equal(await resetOptions(fields, storage, () => 0), true);
+  assert.deepEqual(saved, { settings: DEFAULT_SETTINGS });
+  assert.equal(fields.optionalText.value, defaultPrompt);
+  assert.equal(fields.autoClose.disabled, false);
+});
+
+test("reset is an explicitly labeled non-submit button", () => {
+  assert.match(readFileSync("options.html", "utf8"),
+    /<button\s+id="reset-settings"\s+type="button">Reset to defaults<\/button>/);
 });
 
 test("placement defaults after the link without writes and preserves saved choices", async () => {

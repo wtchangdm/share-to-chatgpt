@@ -1,6 +1,6 @@
 import {
   loadOptions,
-  resetPrompt,
+  resetOptions,
   saveOptions,
   syncAutoCloseAvailability,
   type OptionsFields
@@ -42,15 +42,15 @@ fields.autoSubmit.addEventListener("change", () => {
   syncAutoCloseAvailability(fields);
 });
 
-getRequiredElement("#reset-prompt", HTMLButtonElement).addEventListener("click", () => {
-  resetPrompt(fields);
-  fields.optionalText.focus();
-});
-
 const form = getRequiredElement("#settings-form", HTMLFormElement);
 form.addEventListener("submit", (event) => {
   event.preventDefault();
   void saveOptions(fields, chrome.storage.local, window.setTimeout.bind(window));
+});
+
+const resetButton = getRequiredElement("#reset-settings", HTMLButtonElement);
+resetButton.addEventListener("click", () => {
+  void resetOptions(fields, chrome.storage.local, window.setTimeout.bind(window));
 });
 
 void loadOptions(fields, chrome.storage.local);
