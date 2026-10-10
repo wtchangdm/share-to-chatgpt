@@ -1,4 +1,4 @@
-import { normalizeSettings } from "./prompt";
+import { DEFAULT_SETTINGS, normalizeSettings } from "./prompt";
 import type { OptionalTextPlacement, Settings } from "./types";
 
 const SETTINGS_KEY = "settings";
@@ -23,6 +23,10 @@ type ScheduleClear = (callback: () => void, delay: number) => unknown;
 const defaultErrorReporter: ErrorReporter = (message, error) => {
   console.error(message, error);
 };
+
+export function resetPrompt(fields: OptionsFields): void {
+  fields.optionalText.value = DEFAULT_SETTINGS.optionalText;
+}
 
 export function syncAutoCloseAvailability(fields: OptionsFields): void {
   fields.autoClose.disabled = !fields.autoSubmit.checked;

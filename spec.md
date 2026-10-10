@@ -56,6 +56,8 @@ Placement defaults to `"append"` when missing or invalid; existing saved `"prepe
 
 The storage key remains `optionalText` for compatibility with saved settings. Missing or non-string values use the default prompt; existing string values, including empty or whitespace-only strings, are preserved. Loading defaults does not write settings or overwrite saved preferences.
 
+The Options **Reset prompt** button replaces only the Prompt field with the current `DEFAULT_SETTINGS.optionalText` and focuses that field. It does not change placement, cleanup, automation, or saved settings. **Save** is required to persist the reset; closing or reloading without saving retains the previously saved prompt.
+
 Automatic closing defaults to on only when `autoClose` is absent or undefined. Saved boolean values, including `false`, are preserved; other invalid values keep automatic closing disabled. Loading defaults does not persist settings. Disabling automatic submission leaves the saved automatic-close preference intact but makes it ineffective.
 
 ### Default prompt
@@ -312,6 +314,7 @@ Run the cases relevant to a change and report which cases were verified in the c
 - Disable link cleanup, send the same URL, and verify it remains unchanged.
 - Save prepend text in **Options**, send a page, and verify `text + space + cleaned URL`.
 - Save append text, send a link, and verify `cleaned URL + two LF line breaks + text`.
+- In Options with a saved custom prompt and non-default settings, click **Reset prompt** and verify the latest default Prompt appears while other settings remain unchanged. Repeat after editing or clearing the Prompt. Reload without saving and verify the saved custom prompt returns; reset and save, then reopen and verify the default persists.
 - In a fresh extension profile, confirm Options displays the default Prompt. Clear it, save, reopen Options, and confirm it stays empty and sharing sends only the URL. Existing custom prompts must also remain unchanged after reload.
 - Save Prompt text with multiple paragraphs, blank lines, and single line breaks; verify they survive both prepend and append, deep-link prefill, and fallback insertion. In the current contenteditable editor, verify direct paragraphs and empty-paragraph placeholders compare as logical lines, without accepting missing blank lines or collapsed text. Repeat with automatic submission disabled, then enabled, verifying one correctly formatted message and no collapsed paragraphs. If exact formatting cannot be verified, confirm the tab stays open without submission.
 - Trigger two dispatches close together and verify each target tab submits its own prompt once.

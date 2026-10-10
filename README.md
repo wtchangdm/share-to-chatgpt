@@ -54,6 +54,7 @@ Reload the extension from `chrome://extensions` after rebuilding it.
 - Press `Command+B` on macOS or `Ctrl+B` on other platforms to send the hovered link URL, or the current page URL when no link is hovered.
 - Customize or disable the shortcut at `chrome://extensions/shortcuts`.
 - Right-click the extension icon and select **Options** to configure sharing and automation.
+- In Options, **Reset prompt** restores the latest default Prompt without changing other settings. Click **Save** to keep it; closing without saving leaves the saved prompt unchanged.
 
 | Option | Default | Behavior |
 | --- | --- | --- |

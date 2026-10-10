@@ -1,5 +1,6 @@
 import {
   loadOptions,
+  resetPrompt,
   saveOptions,
   syncAutoCloseAvailability,
   type OptionsFields
@@ -39,6 +40,11 @@ function getOptionsFields(): BrowserOptionsFields {
 const fields = getOptionsFields();
 fields.autoSubmit.addEventListener("change", () => {
   syncAutoCloseAvailability(fields);
+});
+
+getRequiredElement("#reset-prompt", HTMLButtonElement).addEventListener("click", () => {
+  resetPrompt(fields);
+  fields.optionalText.focus();
 });
 
 const form = getRequiredElement("#settings-form", HTMLFormElement);

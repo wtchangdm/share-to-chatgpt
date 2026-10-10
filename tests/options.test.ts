@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   loadOptions,
+  resetPrompt,
   saveOptions,
   type OptionsFields,
   type SettingsStorage
@@ -64,6 +65,41 @@ test("prompt defaults load without overwriting saved text or an intentionally em
   stored = {};
   assert.equal(await loadOptions(fields, storage), true);
   assert.equal(fields.optionalText.value, defaultPrompt);
+});
+
+test("reset prompt restores the latest default without saving or changing other settings", async () => {
+  let stored: Record<string, unknown> = {
+    settings: {
+      optionalText: "Custom prompt",
+      placement: "prepend",
+      stripTrackingParameters: false,
+      autoSubmit: false,
+      autoClose: false
+    }
+  };
+  let writes = 0;
+  const storage: SettingsStorage = {
+    async get() { return stored; },
+    async set(items) { stored = items; writes++; }
+  };
+  const fields = optionsFields();
+  assert.equal(await loadOptions(fields, storage), true);
+  const originalFields = structuredClone(fields);
+
+  for (let reset = 0; reset < 2; reset++) {
+    fields.optionalText.value = reset === 0 ? "Edited prompt" : "";
+    resetPrompt(fields);
+    assert.deepEqual(fields, { ...originalFields, optionalText: { value: defaultPrompt } });
+    assert.equal(writes, 0);
+  }
+
+  const reopened = optionsFields();
+  assert.equal(await loadOptions(reopened, storage), true);
+  assert.equal(reopened.optionalText.value, "Custom prompt");
+  assert.equal(await saveOptions(fields, storage, () => 0), true);
+  assert.equal(writes, 1);
+  assert.equal(await loadOptions(reopened, storage), true);
+  assert.equal(reopened.optionalText.value, defaultPrompt);
 });
 
 test("placement defaults after the link without writes and preserves saved choices", async () => {
