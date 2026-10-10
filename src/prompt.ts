@@ -3,17 +3,19 @@ import type { Settings } from "./types";
 export const DEFAULT_SETTINGS: Settings = {
   optionalText: `Read the linked page. Start with a brief summary of its main point, key findings, and significance.
 
-Then add only analysis that materially improves my understanding. Consider what is established versus claimed, interpreted, or speculative; the strongest evidence and important limitations; meaningful counterarguments or missing context; and consequential, surprising, overstated, or easily misunderstood points. These are evaluation criteria, not required sections. Include a point only if it changes the takeaway, confidence in it, or understanding of how or why it matters.
+Add only analysis that materially improves my understanding: distinguish established facts from claims, interpretations, and speculation; assess the strongest evidence, important limitations, meaningful counterarguments, and missing context. Include consequential or easily misunderstood points only when they change the takeaway, confidence, or understanding of how or why it matters. These are evaluation criteria, not required sections. Do not manufacture false balance.
 
-Use reliable external sources when needed to verify a consequential claim or resolve an important gap, and cite sources used. Disclose material limits on access to the page rather than inventing its contents.
+Use reliable external sources when needed to verify consequential claims or fill important gaps, and cite sources near the claims or visuals they support. Disclose material access limits rather than inventing the page's contents.
 
-Briefly include personal relevance or a useful lesson when it adds something specific, using what you know about me without forcing a connection. Recommend the original or follow-up reading only when you can identify substantial value beyond this briefing.
+Proactively choose the clearest supported format: readable prose for straightforward points; compact tables or side-by-side layouts for comparisons on shared criteria; charts for sourced quantitative patterns; diagrams or timelines for mechanisms, dependencies, or event order. Use only formats that add clarity, keeping key comparisons visible together. Mark missing or non-comparable information. Preserve relevant units, timeframes, baselines, and uncertainty; label assumptions and never invent data, scores, or causal relationships.
 
-Do not create or update memories or assumptions about me from this link or summary; base any memory or personal-context updates on personal information I provide in substantive follow-up discussion.
+Use native in-conversation interactivity when exploring relationships or changing inputs or scenarios adds insight. Keep the main takeaway and essential caveats visible without interaction. If unavailable, use text, tables, or static diagrams. Avoid decorative visuals, unnecessary controls, duplicate explanations, and separate apps or raw UI code.
 
-Keep the depth proportional to the material. Preserve central findings, essential explanations, and caveats that change the takeaway. Cut low-value or repetitive points rather than compressing useful explanations into dense prose.
+Include personal relevance or a useful lesson only when specific. Recommend further reading only when it offers substantial value beyond the briefing.
 
-Use readable paragraphs or a short list, merging related points. Omit inapplicable categories, generic caveats, repeated conclusions, process preambles, and offers to continue. Do not manufacture false balance.`,
+Do not create or update memories or assumptions about me from this link or summary; base any personal-context updates on personal information I provide in substantive follow-up discussion.
+
+Follow my existing language and style preferences. Keep depth proportional, preserving essential explanations and caveats. Cut low-value material rather than making useful explanations dense. Omit generic caveats, repeated conclusions, process preambles, and offers to continue.`,
   placement: "append",
   stripTrackingParameters: true,
   autoSubmit: true,
