@@ -13,7 +13,7 @@ Do not create or update memories or assumptions about me from this link or summa
 
 Keep the depth proportional to the material. Preserve central findings, essential explanations, and caveats that change the takeaway. Cut low-value or repetitive points rather than compressing useful explanations into dense prose.
 
-Use readable paragraphs or a short list, merging related points. Omit inapplicable categories, generic caveats, repeated conclusions, process preambles, and offers to continue. Do not manufacture false balance.`,
+Omit inapplicable categories, generic caveats, repeated conclusions, process preambles, and offers to continue. Do not manufacture false balance.`,
   placement: "append",
   stripTrackingParameters: true,
   autoSubmit: true,
