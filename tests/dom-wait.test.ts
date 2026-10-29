@@ -30,8 +30,8 @@ function installObservationDom() {
     observations,
     get disconnects() { return disconnects; },
     mutate() { callback(); },
-    replaceRoot() {
-      currentRoot.isConnected = false;
+    replaceRoot(detach = true) {
+      currentRoot.isConnected = !detach;
       currentRoot = { isConnected: true };
       return currentRoot;
     },
@@ -76,6 +76,20 @@ test("DOM waits clean up on reader errors, timeout, and a subsequent successful 
     assert.equal(dom.disconnects, 2);
     assert.equal(await waitFor(() => true, Date.now() + 1_000), true);
     assert.equal(dom.disconnects, 3);
+  } finally { dom.restore(); }
+});
+
+test("DOM waits rebind when the previous active main remains connected", async () => {
+  const dom = installObservationDom();
+  try {
+    let ready = false;
+    const result = waitFor(() => ready ? true : null, Date.now() + 1_000);
+    const replacement = dom.replaceRoot(false);
+    ready = true;
+    dom.mutate();
+    assert.equal(await result, true);
+    assert.equal(dom.root.isConnected, true);
+    assert.equal(dom.observations.at(-1)?.target, replacement);
   } finally { dom.restore(); }
 });
 

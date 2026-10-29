@@ -25,8 +25,12 @@ try {
   browser(["open", "about:blank", "--session", session, "--json"]);
   const output = JSON.parse(browser(
     ["eval", "--stdin", "--session", session, "--json"],
-    `${bundle.outputFiles[0].text}\ncomposerChecks.${process.argv.includes("--benchmark")
-      ? "benchmarkComposerReading" : "checkComposerInsertion"}();`
+    `${bundle.outputFiles[0].text}\n${process.argv.includes("--benchmark-submission")
+      ? "composerChecks.benchmarkSubmission()"
+      : process.argv.includes("--benchmark")
+      ? "composerChecks.benchmarkComposerReading()"
+      : "(async () => ({ insertion: composerChecks.checkComposerInsertion(), " +
+        "activePage: await composerChecks.checkActivePageSelectors() }))()"};`
   ));
   if (!output.success) throw new Error(JSON.stringify(output.error));
   console.log(JSON.stringify(output.data.result));

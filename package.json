@@ -9,6 +9,7 @@
     "benchmark:query-stripping": "node --expose-gc scripts/benchmark-query-stripping.mjs",
     "benchmark:prompt": "node --expose-gc scripts/benchmark-prompt.mjs",
     "benchmark:composer-reading": "node scripts/test-composer-browser.mjs --benchmark",
+    "benchmark:submission": "node scripts/test-composer-browser.mjs --benchmark-submission",
     "build": "node scripts/build.mjs",
     "package": "npm run build && node scripts/package.mjs",
     "typecheck": "tsc --noEmit",

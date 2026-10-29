@@ -1,10 +1,10 @@
 import {
   countStartedAssistantMessages,
   findComposer,
-  findComposerForm,
   findObservationRoot,
   findResponseStopButton,
   findSendButton,
+  isModelSelectorEnabled,
   isSendButtonEnabled,
   OBSERVED_ATTRIBUTES,
   readComposerText,
@@ -78,10 +78,12 @@ export function waitFor<T>(readValue: () => T | null, deadline: number): Promise
           finish(null);
           return;
         }
-        // React can replace main. Polling also recovers a detached observation root.
-        if (root !== document && !root.isConnected) {
+        // Page switches can retain the previous main in the DOM. Polling also
+        // detects active-page changes outside the currently observed subtree.
+        const currentRoot = findObservationRoot();
+        if (root !== currentRoot) {
           observer.disconnect();
-          root = findObservationRoot();
+          root = currentRoot;
           observer.observe(root, options);
         }
         const value = readValue();
@@ -182,32 +184,16 @@ async function preparePrompt(dispatch: DispatchPayload): Promise<void> {
   }
 }
 
-function readReadySubmission(prompt: string): {
-  composer: ComposerElement;
-  button: HTMLButtonElement;
-} | null {
+function readReadySubmission(prompt: string): HTMLButtonElement | null {
   const composer = findComposer();
-  if (!composer || !composerHasPrompt(composer, prompt)) return null;
+  if (!composer || !composerHasPrompt(composer, prompt) || !isModelSelectorEnabled(composer)) return null;
   const button = findSendButton(composer);
-  return button && isSendButtonEnabled(button) ? { composer, button } : null;
-}
-
-function submitPrompt(composer: ComposerElement, button: HTMLButtonElement): void {
-  const form = findComposerForm(composer);
-  if (form) {
-    try {
-      form.requestSubmit(button);
-      return;
-    } catch (error) {
-      console.warn("[Share to ChatGPT] form.requestSubmit failed; using button.click().", error);
-    }
-  }
-  button.click();
+  return button && isSendButtonEnabled(button) ? button : null;
 }
 
 async function submitAndObserve(dispatch: DispatchPayload): Promise<boolean> {
   if (!await waitFor(() => readReadySubmission(dispatch.prompt), dispatch.expiresAt)) {
-    throw new Error("The expected prompt could not be verified with an enabled Send button before timeout.");
+    throw new Error("The expected prompt could not be verified with an enabled model selector and Send button before timeout.");
   }
   const armed = await sendMessage({ type: "arm-dispatch", dispatchId: dispatch.id });
   if (!armed.ok) throw new Error(armed.error);
@@ -216,12 +202,13 @@ async function submitAndObserve(dispatch: DispatchPayload): Promise<boolean> {
   // prompt captured before the service worker replied, and never re-arm/retry.
   const ready = readReadySubmission(dispatch.prompt);
   if (!ready) {
-    throw new Error("The expected prompt or enabled Send button changed while arming; refusing to submit.");
+    throw new Error("The expected prompt or enabled model/Send controls changed while arming; refusing to submit.");
   }
   const closeCheck = dispatch.autoClose
     ? createAutoCloseCheck(countStartedAssistantMessages())
     : null;
-  submitPrompt(ready.composer, ready.button);
+  // Invoke button-specific frontend handlers as well as the form's submit event.
+  ready.click();
 
   const submitted = await waitFor(() => {
     const composer = findComposer();
@@ -234,7 +221,7 @@ async function submitAndObserve(dispatch: DispatchPayload): Promise<boolean> {
     }) ? true : null;
   }, Math.min(dispatch.expiresAt, Date.now() + SUBMISSION_CONFIRM_TIMEOUT_MS));
   if (!submitted) {
-    throw new Error("Submission could not be confirmed after invoking the composer form.");
+    throw new Error("Submission could not be confirmed after clicking the Send button.");
   }
   if (!closeCheck) return false;
 

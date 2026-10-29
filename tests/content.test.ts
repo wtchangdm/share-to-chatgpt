@@ -12,7 +12,8 @@ import {
 import { countStartedAssistantMessages } from "../src/selectors";
 import type { DispatchPayload, DispatchResponse } from "../src/types";
 
-const modernAssistantSelector = 'main [data-chatgpt-conversation-selection-target] ' +
+const modernAssistantSelector = '[data-app-shell-active-page="true"] ' +
+  'main [data-chatgpt-conversation-selection-target] ' +
   '[data-turn-key] ' +
   '[data-markdown-text-style="assistant-message"]';
 
@@ -52,6 +53,7 @@ class FakeInputEvent {
 class FakeButton {
   disabled = false;
   clickCount = 0;
+  onClick: (() => void) | undefined;
 
   getAttribute(): string | null {
     return null;
@@ -59,6 +61,7 @@ class FakeButton {
 
   click(): void {
     this.clickCount += 1;
+    this.onClick?.();
   }
 }
 
@@ -67,9 +70,14 @@ class FakeForm {
   onSubmit: (() => void) | undefined;
   sendButtonAvailable = true;
   stopButtonAvailable = false;
+  modelButtonAvailable = true;
+  readonly modelButton = new FakeButton();
   readonly stopButton = new FakeButton();
 
   querySelector(selector: string): FakeButton | null {
+    if (selector === 'button[type="button"][aria-label="Select ChatGPT model"]') {
+      return this.modelButtonAvailable ? this.modelButton : null;
+    }
     if (selector === 'button[type="button"][aria-label="Stop"]') {
       return this.stopButtonAvailable ? this.stopButton : null;
     }
@@ -78,7 +86,12 @@ class FakeForm {
       : null;
   }
 
-  constructor(private readonly button: FakeButton) {}
+  constructor(private readonly button: FakeButton) {
+    button.onClick = () => {
+      this.submittedButtons.push(button);
+      this.onSubmit?.();
+    };
+  }
 
   requestSubmit(button: FakeButton): void {
     this.submittedButtons.push(button);
@@ -139,7 +152,8 @@ function installDom(): InstalledDom {
   });
   setGlobal("document", {
     querySelector(selector: string) {
-      return selector === 'main form textarea[name="prompt"]' ? textarea : null;
+      return selector === '[data-app-shell-active-page="true"] main form textarea[name="prompt"]'
+        ? textarea : null;
     },
     querySelectorAll(selector: string) {
       assistantScans += 1;
@@ -353,6 +367,60 @@ test("textarea fallback injection is read back with exact prompt verification", 
   }
 });
 
+for (const modelState of ["missing", "disabled"] as const) {
+  test(`an enabled Send cannot submit while the model control is ${modelState}`, async () => {
+    const dom = installDom();
+    const messages: string[] = [];
+    const dispatch = claimedDispatch({ autoClose: false, expiresAt: Date.now() + 50 });
+    const originalChrome = globalThis.chrome;
+    dom.textarea.value = prompt;
+    dom.form.modelButtonAvailable = modelState !== "missing";
+    dom.form.modelButton.disabled = modelState === "disabled";
+    dom.form.onSubmit = () => { dom.textarea.value = ""; };
+    Object.defineProperty(globalThis, "chrome", {
+      configurable: true,
+      value: { runtime: { async sendMessage(message: { type: string }): Promise<DispatchResponse> {
+        messages.push(message.type);
+        return message.type === "claim-dispatch" ? { ok: true, dispatch } : { ok: true };
+      } } }
+    });
+    try {
+      await runDispatch(dispatch.id);
+      assert.equal(dom.button.clickCount, 0);
+      assert.deepEqual(dom.form.submittedButtons, []);
+      assert.deepEqual(messages, ["claim-dispatch", "fail-dispatch"]);
+    } finally {
+      Object.defineProperty(globalThis, "chrome", { configurable: true, value: originalChrome });
+      dom.restore();
+    }
+  });
+}
+
+test("submission invokes the Send click handler once, not requestSubmit", async () => {
+  const dom = installDom();
+  const messages: string[] = [];
+  const dispatch = claimedDispatch({ autoClose: false });
+  const originalChrome = globalThis.chrome;
+  dom.textarea.value = prompt;
+  dom.form.onSubmit = () => { dom.textarea.value = ""; };
+  Object.defineProperty(globalThis, "chrome", {
+    configurable: true,
+    value: { runtime: { async sendMessage(message: { type: string }): Promise<DispatchResponse> {
+      messages.push(message.type);
+      return message.type === "claim-dispatch" ? { ok: true, dispatch } : { ok: true };
+    } } }
+  });
+  try {
+    await runDispatch(dispatch.id);
+    assert.equal(dom.button.clickCount, 1, "Send-specific click handlers must run");
+    assert.deepEqual(dom.form.submittedButtons, [dom.button]);
+    assert.deepEqual(messages, ["claim-dispatch", "arm-dispatch", "complete-dispatch"]);
+  } finally {
+    Object.defineProperty(globalThis, "chrome", { configurable: true, value: originalChrome });
+    dom.restore();
+  }
+});
+
 test("an incomplete assistant response leaves the submitted tab open", async () => {
   const dom = installDom();
   const closeRequests: boolean[] = [];
@@ -401,7 +469,7 @@ test("an incomplete assistant response leaves the submitted tab open", async () 
   }
 });
 
-for (const change of ["prompt", "send-button"] as const) {
+for (const change of ["prompt", "send-button", "model-button"] as const) {
   test(`arming cannot submit after the ${change} changes`, async () => {
     const dom = installDom();
     const messages: string[] = [];
@@ -417,6 +485,7 @@ for (const change of ["prompt", "send-button"] as const) {
             if (message.type === "claim-dispatch") return { ok: true, dispatch };
             if (message.type === "arm-dispatch") {
               if (change === "prompt") dom.textarea.value = "Changed during arming";
+              else if (change === "model-button") dom.form.modelButton.disabled = true;
               else dom.button.disabled = true;
             }
             return { ok: true };
@@ -489,7 +558,7 @@ for (const scenario of [
       await runDispatch(dispatch.id);
       assert.deepEqual(messages, ["claim-dispatch", "arm-dispatch", "complete-dispatch"]);
       assert.deepEqual(dom.form.submittedButtons, [dom.button]);
-      assert.equal(dom.button.clickCount, 0);
+      assert.equal(dom.button.clickCount, 1);
       assert.deepEqual(closeRequests, [scenario.closes]);
       if (!scenario.autoClose) {
         assert.equal(dom.assistantScans, 0);
@@ -559,7 +628,7 @@ test("a canonical conversation closes as soon as the response starts", async () 
       "complete-dispatch"
     ]);
     assert.deepEqual(dom.form.submittedButtons, [dom.button]);
-    assert.equal(dom.button.clickCount, 0);
+    assert.equal(dom.button.clickCount, 1);
     assert.deepEqual(closeRequests, [true]);
     assert.equal(dom.assistantScans, 1, "only the pre-submit baseline is scanned on the Stop fast path");
     assert.deepEqual(statesAtCompletion, [{

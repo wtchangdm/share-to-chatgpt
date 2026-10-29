@@ -170,7 +170,7 @@ The source tab's extension action shows a blue `…` while its latest dispatch i
 
 ## Readiness and time bounds
 
-Readiness uses `MutationObserver` on `main` (the document until `main` exists), rebinding if React replaces the root. It observes child/text changes and `disabled`, `aria-disabled`, `contenteditable`, `aria-label`, `type`, and `data-markdown-text-style`, including in-place Send-to-Stop changes. Bounded 250 ms polling covers URL-only changes and missed events; no fixed page-load sleep is used. Success, timeout, and reader failure all release observers and timers.
+Readiness uses `MutationObserver` on `[data-app-shell-active-page="true"] main` (the document until that active main exists), rebinding whenever the active root changes, even if React retains the previous main in the DOM. It observes child/text changes and `disabled`, `aria-disabled`, `contenteditable`, `aria-label`, `type`, and `data-markdown-text-style`, including in-place Send-to-Stop changes. Bounded 250 ms polling covers URL-only changes and missed events; no fixed page-load sleep is used. Success, timeout, and reader failure all release observers and timers.
 
 A pending or claimed dispatch expires approximately 15 seconds after creation. Arming an auto-close dispatch extends its expiry to approximately 120 seconds from that transition; other armed dispatches retain the original expiry. Expiration is checked on every dispatch message, at service-worker startup, and opportunistically before a new dispatch. Service-worker timers provide prompt cleanup while the worker remains active; correctness does not depend on exact timer delivery.
 
@@ -183,7 +183,7 @@ Current bounded phases are:
 
 ## Selector strategy
 
-All ChatGPT selector logic is isolated in `src/selectors.ts`.
+All ChatGPT selector logic is isolated in `src/selectors.ts`. Scope composer and assistant queries to `[data-app-shell-active-page="true"] main`: the current app shell retains inactive pages, including their composers and conversation content. Inactive pages must never supply prompt, submission, or response evidence. Without an active page, no composer or assistant response qualifies.
 
 ### Current-frontend compatibility policy
 
@@ -195,24 +195,30 @@ Preserve supported interactions, exact prompt verification, one-way dispatch, ti
 
 Priority:
 
-1. `main form[data-chatgpt-composer] [data-composer-markdown][contenteditable="true"][role="textbox"]`
-2. `main form [contenteditable="true"][role="textbox"]`
-3. `main form textarea[name="prompt"]`
+Within `[data-app-shell-active-page="true"] main`:
+
+1. `form[data-chatgpt-composer] [data-composer-markdown][contenteditable="true"][role="textbox"]`
+2. `form [contenteditable="true"][role="textbox"]`
+3. `form textarea[name="prompt"]`
 
 All candidates stay inside a main-content form; no historical ID or page-wide form matching.
 
-Read textarea values directly. The observed contenteditable editor represents input lines as direct `p` children, including empty paragraphs containing a terminal `br.ProseMirror-trailingBreak` placeholder. Read text nodes and hard `br` line breaks, ignore only that terminal placeholder, and join paragraphs with one LF. Flat text/`br` content from insertion uses the same reader. Do not use layout-dependent `innerText` for verification: it adds visual paragraph spacing that is not part of the prompt. Unrecognized elements or mixed paragraph structures are unverifiable and must not pass prompt checks.
+Read textarea values directly. The observed contenteditable editor represents input lines as direct `p` children, including empty paragraphs containing a terminal `br.ProseMirror-trailingBreak` placeholder. Read text nodes and hard `br` line breaks, ignore only that terminal placeholder, and join paragraphs with one LF. Flat text/`br` content from insertion uses the same reader. The current editor also creates inline URL spans identified by `text-link-href`, `data-appearance="inline-mention"`, `data-layout="inline-flow"`, and `data-breakable-url`. Read their label through plain or class-only span wrappers; ignore only a text-free `span[data-inline-url-icon][aria-hidden="true"][contenteditable="false"]` inside such a link. The label must exactly match `text-link-href`; mismatched or abbreviated labels are unverifiable. Plain or class-only spans also wrap ordinary input text. Do not use layout-dependent `innerText` for verification: it adds visual paragraph spacing that is not part of the prompt. Other unrecognized elements, span attributes, non-empty icons, or mixed paragraph structures are unverifiable and must not pass prompt checks.
 
 ### Send button
 
 Use an enabled `button[type="submit"]` inside the composer's form, respecting `disabled` and `aria-disabled`. Do not depend on localized labels, historical test IDs, or page-wide “Send” text matching.
+
+### Submission readiness
+
+Before arming and again after the arming reply, require an enabled `button[type="button"][aria-label="Select ChatGPT model"]` in the composer's form, respecting both `disabled` and `aria-disabled`. The observed startup UI can expose an enabled Send button before the model selector appears or becomes enabled. Send alone is not sufficient readiness evidence. Wait within the existing dispatch deadline; do not add a fixed delay or retry a submission.
 
 ### Assistant response
 
 Response markers:
 
 ```css
-main [data-chatgpt-conversation-selection-target] [data-turn-key] [data-markdown-text-style="assistant-message"]
+[data-app-shell-active-page="true"] main [data-chatgpt-conversation-selection-target] [data-turn-key] [data-markdown-text-style="assistant-message"]
 button[type="button"][aria-label="Stop"] /* restricted to the composer's form */
 ```
 
@@ -244,18 +250,18 @@ Immediately before submission, the content script rechecks that:
 1. The composer exists.
 2. The expected prompt is present.
 3. The scoped Send button exists.
-4. The Send button is enabled.
+4. The Send button and scoped model selector are enabled.
 5. The dispatch was successfully armed by the service worker.
 
-After the asynchronous arming reply, the script reacquires the composer and enabled Send control and verifies the exact prompt again. A change at that boundary fails closed without submitting, retrying, or arming a second time.
+After the asynchronous arming reply, the script reacquires the composer, enabled model selector, and enabled Send control and verifies the exact prompt again. A change at that boundary fails closed without submitting, retrying, or arming a second time.
 
-Submission uses:
+Submission invokes the verified Send control once:
 
 ```js
-form.requestSubmit(button);
+button.click();
 ```
 
-`button.click()` is used only when the form is unavailable or `requestSubmit` throws. No synthetic keyboard event is used.
+Use the Send click handler as well as the form's submit event, rather than bypassing button-specific frontend logic with `form.requestSubmit()`. Do not fall back to direct form submission or retry a click. No synthetic keyboard event is used.
 
 Submission is confirmed when the composer remains observable and either no longer contains the expected prompt or its Send button becomes disabled. A temporarily missing composer is treated as uncertainty and does not confirm submission. Unreadable composer content is not evidence that the expected prompt was cleared; in that case only an observable disabled Send button can confirm submission.
 
@@ -304,7 +310,7 @@ Run the cases relevant to a change and report which cases were verified in the c
 - On a non-ChatGPT page, click the toolbar button once.
 - Confirm the original tab remains selected throughout.
 - Confirm one background ChatGPT tab opens with the page URL in the composer and submits one initial message.
-- Confirm no Enter key or second click is needed and the ChatGPT tab remains open when auto-close is disabled.
+- Confirm no Enter key or second click is needed and the ChatGPT tab remains open when auto-close is disabled. During startup, confirm an enabled Send does not trigger submission before the scoped model selector appears and is enabled.
 - Right-click a link, choose **Send link to ChatGPT**, and confirm the linked URL—not the current page URL—is submitted.
 - Hover over a link, press the configured shortcut, and confirm the linked URL—not the current page URL—is submitted.
 - Press the shortcut without hovering a link and confirm the current page URL is submitted.
@@ -316,13 +322,13 @@ Run the cases relevant to a change and report which cases were verified in the c
 - Save append text, send a link, and verify `cleaned URL + two LF line breaks + text`.
 - In Options, change and save every setting, make unsaved edits, then choose **Reset to defaults**. Confirm all fields return to current defaults, automatic closing is enabled, and reopening retains defaults without a separate Save. Repeat reset and confirm unrelated local data and active dispatches remain intact.
 - In a fresh extension profile, confirm Options displays the default Prompt. Clear it, save, reopen Options, and confirm it stays empty and sharing sends only the URL. Existing custom prompts must also remain unchanged after reload.
-- Save Prompt text with multiple paragraphs, blank lines, and single line breaks; verify they survive both prepend and append, deep-link prefill, and fallback insertion. In the current contenteditable editor, verify direct paragraphs and empty-paragraph placeholders compare as logical lines, without accepting missing blank lines or collapsed text. Repeat with automatic submission disabled, then enabled, verifying one correctly formatted message and no collapsed paragraphs. If exact formatting cannot be verified, confirm the tab stays open without submission.
+- Save Prompt text with multiple paragraphs, blank lines, and single line breaks; verify they survive both prepend and append, deep-link prefill, and fallback insertion. In the current contenteditable editor, verify direct paragraphs, empty-paragraph placeholders, and inline URL labels/icons compare as logical text, without accepting mismatched link targets, missing blank lines, or collapsed text. Repeat with automatic submission disabled, then enabled, verifying one correctly formatted message and no collapsed paragraphs. If exact formatting cannot be verified, confirm the tab stays open without submission.
 - Trigger two dispatches close together and verify each target tab submits its own prompt once.
 - Log out of ChatGPT or block the composer, dispatch again, and confirm no prompt is submitted, the tab remains open, and a red `!` badge or error appears.
 - Open an unrelated ChatGPT tab and confirm it does not auto-submit anything.
 - Disable automatic submission and confirm the correct prompt is prefilled but not submitted.
 - In a fresh profile, confirm automatic closing is checked. Save it off, reload Options, and confirm it remains off. Disable automatic submission and confirm the closing control is disabled without losing its saved preference. With automatic submission on and the default automatic closing on, confirm the background tab remains open on temporary paths such as `/c/local-chatgpt%3A<UUID>`, then closes after a canonical `/c/<UUID>` path appears while the enabled form-scoped Stop button is present, without waiting for assistant text or the full response. Reopen that exact conversation and verify it loads with a non-empty response.
-- On the observed ChatGPT UI with a form-scoped contenteditable textbox and no composer ID, confirm one submission and automatic closing after a canonical `/c/<UUID>` path and new non-empty assistant markdown appear, even without a recognized Stop button or finalized message IDs.
+- On the observed ChatGPT UI with a form-scoped contenteditable textbox and no composer ID, confirm one submission and automatic closing after a canonical `/c/<UUID>` path and new non-empty assistant markdown appear, even without a recognized Stop button or finalized message IDs. When the app retains an inactive home page or conversation, confirm only the active page supplies the composer and response evidence, and DOM observation follows active-page switches even when the old main remains connected.
 - Repeat with no deep-link prefill and confirm fallback insertion is recognized by ChatGPT, submitted once, and followed by early closing and successful reopening.
 - Confirm user text and empty assistant placeholders do not trigger closing; temporary conversation paths without a verified streaming-completion transition remain open.
 - Reload the extension and confirm automation settings retain their saved values.

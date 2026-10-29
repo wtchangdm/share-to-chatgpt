@@ -1,13 +1,19 @@
 export type ComposerElement = HTMLTextAreaElement | HTMLElement;
 
+const ACTIVE_MAIN_SELECTOR = '[data-app-shell-active-page="true"] main';
 const COMPOSER_SELECTORS = [
-  'main form[data-chatgpt-composer] [data-composer-markdown][contenteditable="true"][role="textbox"]',
-  'main form [contenteditable="true"][role="textbox"]',
-  'main form textarea[name="prompt"]'
+  `${ACTIVE_MAIN_SELECTOR} form[data-chatgpt-composer] [data-composer-markdown][contenteditable="true"][role="textbox"]`,
+  `${ACTIVE_MAIN_SELECTOR} form [contenteditable="true"][role="textbox"]`,
+  `${ACTIVE_MAIN_SELECTOR} form textarea[name="prompt"]`
 ] as const;
+const INLINE_LINK_ATTRIBUTES = [
+  "class", "text-link-href", "rich-link-source-app-id", "data-appearance", "data-layout",
+  "data-font-weight", "data-tone", "data-underline-on-hover", "data-breakable-url",
+  "data-rich-text-generated-autolink"
+];
 const TURN_SELECTOR = '[data-turn-key]';
 export const ASSISTANT_MESSAGE_SELECTOR =
-  'main [data-chatgpt-conversation-selection-target] ' +
+  `${ACTIVE_MAIN_SELECTOR} [data-chatgpt-conversation-selection-target] ` +
   `${TURN_SELECTOR} [data-markdown-text-style="assistant-message"]`;
 export const RESPONSE_STOP_BUTTON_SELECTOR = 'button[type="button"][aria-label="Stop"]';
 export const SEND_BUTTON_SELECTORS = ['button[type="submit"]'] as const;
@@ -17,7 +23,7 @@ export const OBSERVED_ATTRIBUTES = [
 ];
 
 export function findObservationRoot(): Node {
-  return document.querySelector("main") ?? document;
+  return document.querySelector(ACTIVE_MAIN_SELECTOR) ?? document;
 }
 
 export function findComposer(): ComposerElement | null {
@@ -41,6 +47,13 @@ export function findSendButton(composer: ComposerElement): HTMLButtonElement | n
   return button instanceof HTMLButtonElement ? button : null;
 }
 
+export function isModelSelectorEnabled(composer: ComposerElement): boolean {
+  const button = findComposerForm(composer)?.querySelector(
+    'button[type="button"][aria-label="Select ChatGPT model"]'
+  );
+  return button instanceof HTMLButtonElement && isSendButtonEnabled(button);
+}
+
 export function findResponseStopButton(composer: ComposerElement): HTMLButtonElement | null {
   const button = findComposerForm(composer)?.querySelector(RESPONSE_STOP_BUTTON_SELECTOR);
   return button instanceof HTMLButtonElement ? button : null;
@@ -50,7 +63,7 @@ export function isSendButtonEnabled(button: HTMLButtonElement): boolean {
   return !button.disabled && button.getAttribute("aria-disabled") !== "true";
 }
 
-function readComposerLine(element: HTMLElement): string | null {
+function readComposerLine(element: HTMLElement, inLink = false): string | null {
   let text = "";
   for (let node = element.firstChild; node; node = node.nextSibling) {
     if (node.nodeType === Node.TEXT_NODE) {
@@ -61,6 +74,24 @@ function readComposerLine(element: HTMLElement): string | null {
         continue;
       }
       text += "\n";
+    } else if (node instanceof HTMLSpanElement) {
+      // The current editor decorates URLs with an inline icon and label spans.
+      // Only a text-free, explicitly hidden URL icon may be omitted.
+      if (inLink && node.matches(
+        '[data-inline-url-icon][aria-hidden="true"][contenteditable="false"]'
+      )) {
+        if (node.textContent !== "") return null;
+        continue;
+      }
+      const link = !inLink && node.matches(
+        '[text-link-href][data-appearance="inline-mention"][data-layout="inline-flow"][data-breakable-url]'
+      );
+      if (!node.getAttributeNames().every((name) =>
+        link ? INLINE_LINK_ATTRIBUTES.includes(name) : name === "class"
+      )) return null;
+      const label = readComposerLine(node, inLink || link);
+      if (label === null || (link && label !== node.getAttribute("text-link-href"))) return null;
+      text += label;
     } else {
       // Do not silently omit unfamiliar rich content or infer its formatting.
       return null;

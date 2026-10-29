@@ -244,7 +244,7 @@ test("a transient dispatch marker is added without changing the prompt query", (
 test("automatic closing uses narrow response-state markers", () => {
   assert.equal(
     ASSISTANT_MESSAGE_SELECTOR,
-    'main [data-chatgpt-conversation-selection-target] ' +
+    '[data-app-shell-active-page="true"] main [data-chatgpt-conversation-selection-target] ' +
       '[data-turn-key] ' +
       '[data-markdown-text-style="assistant-message"]'
   );
