@@ -1,32 +1,24 @@
 # Repository instructions
 
-These instructions apply to the entire repository.
+Applies repository-wide.
 
 ## Mandatory documentation
 
-Before changing the project, read this file and the documentation relevant to the work:
+Before changes, read this file and relevant documentation: [README.md](README.md) for users; [spec.md](spec.md) for the complete behavior and architecture contract. Their requirements are binding unless explicitly changed by the task—not relaxed for simpler implementation or tests.
 
-- `README.md` is the user-facing product, installation, usage, and compatibility guide.
-- `spec.md` is the complete behavior contract and architecture reference.
-
-All requirements in those files are binding unless the task explicitly changes them. In particular, preserve the supported interactions, settings semantics, dispatch state machine, time bounds, narrow selector strategy, fail-closed behavior, permissions, security, and privacy constraints in `spec.md`. Do not weaken a documented requirement merely to simplify implementation or testing.
-
-Keep documentation and implementation aligned. Put contributor workflow in `AGENTS.md`, user-facing information in `README.md`, and detailed behavior or architecture in `spec.md`; link rather than duplicate details across files.
+Keep docs aligned with implementation: contributor workflow here, user guidance in README, behavior/architecture in spec. Link rather than duplicate.
 
 ## TDD-first development
 
-Use test-driven development for every behavior change:
+For every behavior change:
 
-1. State the expected behavior and success criteria.
-2. Add or update the smallest automated test that expresses the behavior.
-3. Run the focused test and confirm that it fails for the expected reason (**red**).
-4. Make the smallest production change that passes the test (**green**).
-5. Refactor only while the relevant tests remain green.
-6. Run the full validation suite.
+1. State expected behavior and success criteria.
+2. Add the smallest test (a reproducing regression for bugs) before production changes.
+3. Run it and confirm failure for the expected reason (**red**).
+4. Make the smallest passing change (**green**).
+5. Refactor only while tests stay green; run full validation.
 
-For a bug fix, add a regression test that reproduces the bug before changing production code. Do not implement behavior first and add tests afterward.
-
-Documentation-only, comment-only, formatting-only, and generated-artifact changes do not require a new test. If a ChatGPT browser integration cannot be meaningfully automated locally, test all separable logic first and then perform the narrowest applicable real-browser check from `spec.md`; record the unverified check explicitly when the environment prevents it. Type checking or mocked unit tests do not replace a real-boundary check for Chrome or ChatGPT DOM behavior.
+Docs, comments, formatting, and generated-artifact-only changes need no new test. For browser behavior that cannot be automated locally, test separable logic first, then run the narrowest applicable real-browser check from `spec.md`. Record blocked checks; types and mocks do not verify Chrome/ChatGPT boundaries.
 
 ## Implementation constraints
 
@@ -39,7 +31,7 @@ Documentation-only, comment-only, formatting-only, and generated-artifact change
 - Fail closed: on uncertainty, do not submit or close the tab, retain the documented local diagnostics, and consume dispatch state as specified.
 - Do not broaden Chrome permissions, access ChatGPT private APIs, add telemetry, or send browsing, prompt, settings, dispatch, or response data to third parties.
 - Never store assistant response content; only the documented non-empty check is allowed.
-- Keep implementation, tests, types, `manifest.json`, options UI, `README.md`, and `spec.md` synchronized with changed behavior.
+- Synchronize implementation, tests, types, manifest, Options UI, and docs.
 
 ## Project layout
 
@@ -49,63 +41,36 @@ See the [source layout](spec.md#architecture).
 
 ## Performance validation
 
-Treat changes to URL cleanup, prompt construction, dispatch hot paths, DOM observation or polling, and other latency- or allocation-sensitive runtime boundaries as critical performance changes.
+URL cleanup, prompt construction, dispatch hot paths, DOM observation/polling, and other latency/allocation-sensitive boundaries are critical performance changes:
 
-For every critical performance change:
+1. Benchmark unchanged production code before editing; repeat the same command afterward on the same machine and Node version.
+2. Report command, environment, fixed method, and before/after medians separately from correctness checks.
+3. If no benchmark exists, add one before production changes: bundled production code, fixed inputs, validated outputs, warmup, multiple fixed-size samples, median. No machine-dependent timing thresholds in `npm run check`.
+4. Add deterministic guards for material algorithmic properties where practical; timings do not replace correctness tests.
 
-1. Run the relevant benchmark on the unchanged implementation before editing.
-2. Run the same command after editing on the same machine and Node version.
-3. Report the command, environment, fixed benchmark method, and before/after median measurements separately from correctness checks.
-4. If no relevant benchmark exists, add a deterministic, repeatable harness before changing production code. The harness must exercise bundled production code, use fixed inputs, validate outputs, warm up before measurement, run multiple fixed-size samples, and report a median. Do not enforce machine-dependent wall-clock thresholds in `npm run check`.
-5. Add a deterministic automated guard for material algorithmic properties when practical; timing measurements do not replace correctness tests.
-
-For query-string cleanup, use:
-
-```sh
-npm run benchmark:query-stripping
-```
-
-Its fixed scenarios cover URLs with no query, clean query parameters, tracking parameters, and encoded retained data.
-
-For prompt construction, use `npm run benchmark:prompt`. Its fixed scenarios cover URL-only, single-line, and multiline Prompt text.
-
-For composer text reading, use `npm run benchmark:composer-reading` (requires `agent-browser` and Chromium). It measures bundled production reads of fixed multiline textarea and contenteditable fixtures in an isolated browser.
-
-For automatic-close DOM observation, use:
-
-```sh
-npm run benchmark:auto-close-observation
-```
-
-Its fixed scenario exercises the bundled assistant-message and composer selectors plus the scoped Send- and Stop-button observations.
-
-For dispatch transition changes, use:
-
-```sh
-npm run benchmark:dispatch-policy
-```
-
-Its fixed scenario exercises bundled claim and arm transitions with a bound target tab.
+| `npm run` command | Fixed coverage |
+| --- | --- |
+| `benchmark:query-stripping` | No query, clean parameters, tracking parameters, encoded retained data |
+| `benchmark:prompt` | URL-only, single-line, multiline Prompt |
+| `benchmark:composer-reading` | Multiline textarea/contenteditable reads; requires `agent-browser` and Chromium |
+| `benchmark:auto-close-observation` | Assistant/composer selectors and scoped Send/Stop observation |
+| `benchmark:dispatch-policy` | Claim/arm transitions with a bound target tab |
 
 ## Validation
 
-During TDD, run the narrowest relevant test for fast red/green feedback. Before completing any code change, run:
+Use focused tests during TDD; finish every code change with `npm run check` (TypeScript, ESLint, unit tests, production build).
 
-```sh
-npm run check
-```
+For Chrome/ChatGPT runtime changes, run applicable [manual regressions](spec.md#manual-regression-checklist). Report automated and manual results separately, with exact reasons for skipped checks.
 
-This performs TypeScript checking, ESLint, unit tests, and a production build. For behavior crossing the Chrome or ChatGPT runtime boundary, also run the applicable manual regression cases in `spec.md`. Report automated checks and manual checks separately, including anything not run and the exact reason.
-
-For composer insertion changes, also run `npm run test:composer-browser` (requires an installed `agent-browser` and Chromium). This runs `tests/browser/composer.ts` in an isolated local browser, including native insertion, forced fallback, repeated use, and reset. It does not access a signed-in profile or replace live ChatGPT regression checks.
+Composer insertion changes also require `npm run test:composer-browser` with installed `agent-browser` and Chromium. It runs `tests/browser/composer.ts` in isolation (native insertion, forced fallback, repeated use, reset), not a signed-in profile or substitute for live ChatGPT checks.
 
 ## Chrome Web Store release preparation
 
-Store copy, permission justifications, reviewer instructions, and image paths are in [store/listing.md](store/listing.md). The public-facing policy is [PRIVACY.md](PRIVACY.md); keep both aligned with the final implementation. Unlisted releases undergo the same review as public releases.
+Keep [store copy, declarations, reviewer instructions, and assets](store/listing.md) and [privacy policy](PRIVACY.md) aligned with the final build. Unlisted and public releases receive the same review.
 
 1. Run `npm run check` and `npm run test:composer-browser`, then the release-relevant [manual regressions](spec.md#manual-regression-checklist). Record automated, isolated-browser, and live ChatGPT results separately; do not treat an Options screenshot as ChatGPT validation.
-2. Run `npm run package`. It rebuilds production code and creates `release/share-to-chatgpt-<version>.zip` with only the runtime allowlist. Packaging requires `zip` on PATH; package tests also require `unzip`. Both are provided by macOS and commonly available on Linux. Generated `release/` files are ignored. Do not upload the repository, source maps, or test fixtures.
-3. Check `unzip -t release/share-to-chatgpt-<version>.zip` and inspect its file list. Extract into a new temporary directory and load that directory in an isolated Chromium session to verify the actual archive, not just the source checkout. The packaging regression test covers first use, replacement of stale archive entries, failure without replacing a good archive, and recovery.
+2. Run `npm run package` to rebuild and create the runtime-only `release/share-to-chatgpt-<version>.zip` (ignored by Git). Requires `zip`; package tests also require `unzip`. Do not upload the repository, source maps, or fixtures.
+3. Run `unzip -t release/share-to-chatgpt-<version>.zip`, inspect entries, extract into a fresh temporary directory, and load it in isolated Chromium. Verify the actual archive, not just the checkout.
 4. Verify asset dimensions and appearance. Capture `store/screenshot-options.png` at 1280×800, light mode, from the real extension Options page with default settings in an isolated profile, without mocking storage or showing conversation content. Render `store/promo.svg` at 440×280 to refresh the promotional PNG. Generate `icons/icon128.png` from `icons/icon.svg` with 96×96 artwork centered in a transparent 128×128 canvas; smaller toolbar icons remain full-size.
 5. Before submission, confirm the publisher account's registration, two-step verification, publisher name, verified contact email, and intended distribution regions. Publish the policy at a stable HTTPS URL only with authorization, and verify signed-out access. Review and certify the dashboard data disclosures against the final build.
 6. With explicit upload/submission approval, create the store item, upload the ZIP and assets, use the prepared listing copy, choose **Unlisted**, and disable automatic publication after review. Publishing requires a separate final decision. Each later uploaded version must increase `manifest.json`'s version; keep `package.json` aligned.

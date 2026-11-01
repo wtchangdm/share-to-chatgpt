@@ -2,31 +2,13 @@
 
 ## Purpose
 
-Replace the foreground-interrupting bookmarklet workflow with a local Chrome extension that opens ChatGPT in a background tab, safely prefills the expected prompt, and optionally submits and closes the tab after ChatGPT assigns a canonical conversation URL and starts responding.
-
-The original bookmarklet workflow is:
-
-```js
-javascript:(()=>{window.open(`https://chatgpt.com/?prompt=${encodeURIComponent(location.href)}`,"_blank","noopener,noreferrer")})()
-```
-
-With default settings, the shared prompt is the target URL after the conservative tracking-parameter cleanup defined below, two LF line breaks (one blank line), and the [default analysis text](#default-prompt). A URL without a listed tracking parameter remains byte-for-byte unchanged. When the Prompt setting is empty, only the URL is sent, and the ChatGPT deep link is:
-
-```text
-https://chatgpt.com/?prompt=<encoded cleaned target URL>
-```
+Share a URL in a background ChatGPT tab, verify the prompt, and optionally submit and close after a conversation URL and response-start signal appear. Defaults combine the cleaned URL, two LF line breaks, and the [default prompt](#default-prompt); an empty Prompt sends only the URL.
 
 ## Supported interactions
 
 ### Toolbar button
 
-1. Read the active tab URL.
-2. Construct the prompt from the URL and saved settings.
-3. Create an inactive `about:blank` tab, bind its tab ID to the dispatch, and then navigate it to ChatGPT.
-4. Keep the original tab active.
-5. Verify or inject the prompt in the ChatGPT composer.
-6. Submit when automatic submission is enabled.
-7. Optionally close the ChatGPT tab after the temporary conversation path changes to a canonical `/c/<UUID>` path and either an enabled form-scoped Stop button or new non-empty assistant markdown indicates that a response started. If no canonical path is observed, completed streaming is the fail-safe fallback.
+Share the active tab URL through the [dispatch flow](#prompt-and-dispatch-flow), keeping the source tab active. Submission and [automatic closing](#submission-and-automatic-closing) follow saved settings.
 
 ### Link context menu
 
@@ -50,15 +32,17 @@ Settings are stored under `settings` in `chrome.storage.local`.
 | `autoSubmit` | `boolean` | `true` | Whether the verified prompt is submitted automatically. |
 | `autoClose` | `boolean` | `true` | Whether the target tab closes after ChatGPT assigns a canonical conversation URL and starts responding. Effective only when `autoSubmit` is enabled. |
 
-A blank Prompt value produces only the cleaned or original target URL. Non-empty Prompt text before the URL is separated from it by one space. When placed after the URL, it is separated by two LF line breaks (one blank line): `<URL>\n\n<Prompt>`. Surrounding whitespace is trimmed, but internal line breaks, blank lines, and indentation are preserved. CRLF and CR line endings are normalized to LF, not spaces.
+Prompt construction trims surrounding whitespace, normalizes CRLF/CR to LF, and preserves internal line breaks, blank lines, and indentation:
 
-Placement defaults to `"append"` when missing or invalid; existing saved `"prepend"` and `"append"` choices are preserved without writes on load.
+- Empty Prompt: target URL only, cleaned if enabled.
+- Prepend: `<Prompt> <URL>` (one space).
+- Append: `<URL>\n\n<Prompt>` (two LF line breaks).
 
-The storage key remains `optionalText` for compatibility with saved settings. Missing or non-string values use the default prompt; existing string values, including empty or whitespace-only strings, are preserved. Loading defaults does not write settings or overwrite saved preferences.
+Loading never writes settings. Missing/invalid placement defaults to `"append"`; valid saved choices are preserved. Keep the `optionalText` storage key: missing/non-string values use the default prompt, while all saved strings—including empty or whitespace-only values—are preserved.
 
 The Options **Reset to defaults** button immediately writes all current default settings under the existing `settings` key and updates every form field, including automatic-close availability. No separate Save is required. It replaces saved preferences and unsaved edits but leaves unrelated local storage and session dispatch state untouched. Repeated resets are safe. A failed write leaves the fields and saved preferences unchanged, reports a local error, and shows `Could not reset settings.`; success shows `Defaults restored.` for approximately two seconds.
 
-Automatic closing defaults to on only when `autoClose` is absent or undefined. Saved boolean values, including `false`, are preserved; other invalid values keep automatic closing disabled. Loading defaults does not persist settings. Disabling automatic submission leaves the saved automatic-close preference intact but makes it ineffective.
+`autoClose` defaults to on only when absent or undefined. Preserve saved booleans; other invalid values disable closing. Disabling automatic submission makes closing ineffective without changing its saved preference.
 
 ### Default prompt
 
@@ -78,7 +62,7 @@ Keep the depth proportional to the material. Preserve central findings, essentia
 Omit inapplicable categories, generic caveats, repeated conclusions, process preambles, and offers to continue. Do not manufacture false balance.
 ```
 
-The memory sentence is a model instruction, not an enforced privacy boundary. It distinguishes using existing personal context for relevance from deriving new personal context from a shared article. Substantive follow-up must provide personal information; merely asking another question about the article is not evidence of a lasting interest or belief. The extension does not control ChatGPT Memory, reference-chat-history settings, or retention, and the link and summary remain part of the current conversation. See the [README privacy guidance](README.md#privacy-and-compatibility).
+Memory guidance permits existing personal context but not new inferences from the article; follow-up must supply personal information, not merely another article question. It is not an enforced privacy boundary: the extension does not control Memory, reference chat history, or retention, and the link/summary remain in context. See [privacy guidance](README.md#privacy-and-compatibility).
 
 ### Tracking-parameter cleanup
 
@@ -91,7 +75,7 @@ Cleanup applies only to valid HTTP and HTTPS URLs and removes every occurrence o
 
 Cleanup scans the raw query once and parses the full URL only after finding a listed candidate, to validate its protocol. It reconstructs changed URLs from the original string, preserving the order and byte representation of retained parameters and the fragment. URLs without a listed parameter, invalid URLs, and non-HTTP(S) URLs are returned unchanged. Generic names such as `ref`, `source`, or `campaign` are not inferred to be tracking because they can control page functionality.
 
-Firefox and Brave document the same general technique of removing known tracking parameters ([Firefox Query Parameter Stripping](https://firefox-source-docs.mozilla.org/toolkit/components/antitracking/anti-tracking/query-stripping/index.html), [Brave privacy features](https://brave.com/privacy-features/)). Removing any parameter can still invalidate a signature or one-time token covering the complete query; users can disable cleanup, and the extension does not guess which URLs are signed.
+Removing parameters can invalidate signatures or one-time tokens covering the query. Users can disable cleanup; the extension does not guess which URLs are signed.
 
 [google-analytics]: https://support.google.com/analytics/answer/10917952
 [google-click-ids]: https://support.google.com/analytics/answer/15612152
@@ -121,41 +105,22 @@ src/
   types.ts            Settings, dispatch, and message types
 ```
 
-The extension uses no framework. esbuild bundles the three browser entry points into `dist/`.
+Framework-free; esbuild bundles three browser entry points into `dist/`.
 
-The store artifact places `manifest.json` at the ZIP root alongside `options.html`, `options.css`, the three bundled JavaScript entry points, and the four manifest-referenced PNG icons. `scripts/package.mjs` uses an explicit runtime allowlist and replaces the versioned archive only after successful packaging; source maps, tests, development dependencies, and store materials are excluded. Packaging does not change runtime permissions or behavior. See [release preparation](AGENTS.md#chrome-web-store-release-preparation) for the contributor workflow.
+`scripts/package.mjs` allowlists only `manifest.json` (ZIP root), `options.html`, `options.css`, three JavaScript bundles, and four manifest PNG icons. It replaces the versioned archive only on success, without changing runtime permissions or behavior. See [release preparation](AGENTS.md#chrome-web-store-release-preparation).
 
 ## Permissions
 
-```json
-{
-  "permissions": [
-    "activeTab",
-    "contextMenus",
-    "scripting",
-    "storage"
-  ],
-  "host_permissions": [
-    "https://chatgpt.com/*"
-  ]
-}
-```
+Permissions: `activeTab`, `contextMenus`, `scripting`, `storage`; host access: `https://chatgpt.com/*` only. The static content script runs there at `document_start` to capture the dispatch marker before application history changes. `scripting` uses temporary `activeTab` access only for the link-or-page command.
 
-The content script is statically limited to `https://chatgpt.com/*` and runs at `document_start` so it can capture the temporary dispatch marker before the client-rendered application changes history. The `scripting` permission is used only when the link-or-page command is invoked; `activeTab` grants temporary access to inspect the active page without persistent all-sites host access.
-
-No all-sites permission, paid OpenAI API, ChatGPT `/backend-api/` access, or third-party telemetry is permitted. The manifest declares Chrome 120 as the minimum supported version, matching the production build target.
+No all-sites permission, paid OpenAI API, ChatGPT `/backend-api/` access, or third-party telemetry. Minimum Chrome version and production build target: 120.
 
 ## Prompt and dispatch flow
 
 1. The service worker reads the target URL and local settings, then applies enabled tracking-parameter cleanup before constructing the prompt.
 2. It generates a random UUID and stores a `pending` dispatch in `chrome.storage.session` before navigation. The payload retains only the generated prompt, tab IDs, timestamps, transition status, and applicable automation flags; it does not duplicate the target URL or retain the source title.
 3. It creates an inactive `about:blank` tab, persists the target tab binding and tab index, and only then navigates that tab to ChatGPT. This ordering prevents the content script from claiming a dispatch before its target binding is stored.
-4. The ChatGPT deep link contains the existing `prompt` query and a temporary hash marker:
-
-   ```text
-   #share-to-chatgpt-dispatch=<UUID>
-   ```
-
+4. Navigate to `https://chatgpt.com/?prompt=<encoded prompt>#share-to-chatgpt-dispatch=<UUID>`.
 5. The content script does nothing in ChatGPT tabs without this marker.
 6. For a marked tab, it removes the hash with `history.replaceState` and claims the matching session payload through extension messaging.
 7. The service worker verifies the sender's bound tab ID and changes the dispatch state to `claimed`.
@@ -166,7 +131,7 @@ No all-sites permission, paid OpenAI API, ChatGPT `/backend-api/` access, or thi
 
 A dispatch can be claimed and armed only once. The state transition before submission favors a missed submission over a duplicated submission if execution is interrupted at the boundary.
 
-The source tab's extension action shows a blue `…` while its latest dispatch is active. Completion changes this to a green `✓` for approximately two seconds, with an action title that distinguishes a submitted prompt from a prefilled prompt. These status updates contain no URL or prompt data. A delayed result from an older dispatch cannot overwrite the source status owned by a newer dispatch. Source status is also cleared when that tab navigates; timer-based clearing is best-effort because a Manifest V3 service worker may stop.
+The source action shows blue `…` during its latest dispatch, then green `✓` for about two seconds. Titles distinguish submitted from prefilled without URL/prompt data. Older dispatch results cannot overwrite newer status. Navigation clears status; timer clearing is best-effort because the service worker may stop.
 
 ## Readiness and time bounds
 
@@ -193,9 +158,7 @@ Preserve supported interactions, exact prompt verification, one-way dispatch, ti
 
 ### Composer
 
-Priority:
-
-Within `[data-app-shell-active-page="true"] main`:
+Within the active main, in priority order:
 
 1. `form[data-chatgpt-composer] [data-composer-markdown][contenteditable="true"][role="textbox"]`
 2. `form [contenteditable="true"][role="textbox"]`
@@ -255,13 +218,7 @@ Immediately before submission, the content script rechecks that:
 
 After the asynchronous arming reply, the script reacquires the composer, enabled model selector, and enabled Send control and verifies the exact prompt again. A change at that boundary fails closed without submitting, retrying, or arming a second time.
 
-Submission invokes the verified Send control once:
-
-```js
-button.click();
-```
-
-Use the Send click handler as well as the form's submit event, rather than bypassing button-specific frontend logic with `form.requestSubmit()`. Do not fall back to direct form submission or retry a click. No synthetic keyboard event is used.
+Invoke the verified Send control once with `button.click()` to preserve button-specific frontend logic and the form submit event. No `form.requestSubmit()`, direct-form fallback, click retry, or synthetic keyboard event.
 
 Submission is confirmed when the composer remains observable and either no longer contains the expected prompt or its Send button becomes disabled. A temporarily missing composer is treated as uncertainty and does not confirm submission. Unreadable composer content is not evidence that the expected prompt was cleared; in that case only an observable disabled Send button can confirm submission.
 
@@ -280,16 +237,7 @@ On final failure:
 - Remove consumed dispatch state.
 - Do not retry submission.
 
-Handled conditions include:
-
-- A shortcut invoked on a page where Chrome forbids script injection.
-- Logged-out sessions.
-- Interstitials or challenges.
-- Missing composer.
-- Failed prompt injection.
-- Missing or disabled Send button.
-- Changed ChatGPT selectors.
-- Closely timed multiple dispatches.
+Handle restricted-page shortcut injection, logged-out sessions, interstitials/challenges, missing composer, failed injection, missing/disabled Send, changed selectors, and closely timed dispatches.
 
 A missing response-start marker or unverified auto-close condition after a confirmed submission is nonfatal: the extension logs a console error, consumes the completed dispatch, and leaves the tab open. It does not show a failure badge for a message that was already submitted.
 
