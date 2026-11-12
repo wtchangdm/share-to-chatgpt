@@ -62,7 +62,7 @@ Use focused tests during TDD; finish every code change with `npm run check` (Typ
 
 For Chrome/ChatGPT runtime changes, run applicable [manual regressions](spec.md#manual-regression-checklist). Report automated and manual results separately, with exact reasons for skipped checks.
 
-Composer insertion changes also require `npm run test:composer-browser` with installed `agent-browser` and Chromium. It runs `tests/browser/composer.ts` in isolation (native insertion, forced fallback, repeated use, reset), not a signed-in profile or substitute for live ChatGPT checks.
+Composer insertion changes also require `npm run test:composer-browser` with installed `agent-browser` and Chromium. It runs `tests/browser/composer.ts` in isolation (native insertion, forced DOM insertion fallback, repeated use, reset), not a signed-in profile or substitute for live ChatGPT checks.
 
 ## Chrome Web Store release preparation
 
@@ -110,6 +110,6 @@ Prefer real entry points; CDP key events do not reliably trigger native Chrome s
 2. Monitor transitions and tab lifecycle before navigation without logging payloads. Inject DOM probes only after entering the permitted ChatGPT origin; do not broaden permissions to access `about:blank`.
 3. Let the real content script/service worker perform every transition, submission, and closure. Mocked messages or manual closure are not live validation. Report that seeded dispatches bypass the native entry point.
 
-Run the relevant [manual regressions](spec.md#manual-regression-checklist): reopen early-closed conversations, verify one submission, retained source selection, consumed state, repeated use, and applicable fallback/disabled-setting paths. Report submission-to-close and canonical-URL-to-close timings separately from benchmarks and automated checks; give exact reasons for unverified boundaries.
+Run the relevant [manual regressions](spec.md#manual-regression-checklist): reopen early-closed conversations, verify one submission, retained source selection, consumed state, repeated use, and applicable DOM insertion fallback/disabled-setting paths. Report submission-to-close and canonical-URL-to-close timings separately from benchmarks and automated checks; give exact reasons for unverified boundaries.
 
 Stop temporary instrumentation, clear only synthetic drafts, and close only test-owned tabs. Preserve settings, unrelated tabs, and conversation history; deleting test conversations requires permission. Remind the user to disable remote debugging.

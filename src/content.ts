@@ -16,7 +16,6 @@ import type { ContentMessage, DispatchPayload, DispatchResponse } from "./types"
 const MARKER_PREFIX = "#share-to-chatgpt-dispatch=";
 const PERSISTED_CONVERSATION_PATH =
   /^\/c\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\/?$/i;
-const PREFILL_GRACE_MS = 4_000;
 const PROMPT_UPDATE_TIMEOUT_MS = 3_000;
 const SUBMISSION_CONFIRM_TIMEOUT_MS = 2_000;
 
@@ -164,21 +163,18 @@ export function insertPrompt(composer: ComposerElement, prompt: string): void {
 
 async function preparePrompt(dispatch: DispatchPayload): Promise<void> {
   const deadline = dispatch.expiresAt;
-  if (!await waitFor(findComposer, deadline)) {
+  const composer = await waitFor(findComposer, deadline);
+  if (!composer) {
     throw new Error(
       "ChatGPT composer did not appear before timeout. The user may be logged out, " +
       "an interstitial may be blocking the page, or ChatGPT's DOM may have changed."
     );
   }
+  insertPrompt(composer, dispatch.prompt);
   const readVerifiedComposer = (): ComposerElement | null => {
     const composer = findComposer();
     return composer && composerHasPrompt(composer, dispatch.prompt) ? composer : null;
   };
-  const prefilled = await waitFor(readVerifiedComposer, Math.min(deadline, Date.now() + PREFILL_GRACE_MS));
-  if (prefilled) return;
-  const composer = findComposer();
-  if (!composer) throw new Error("The ChatGPT composer disappeared before prompt injection.");
-  insertPrompt(composer, dispatch.prompt);
   if (!await waitFor(readVerifiedComposer, Math.min(deadline, Date.now() + PROMPT_UPDATE_TIMEOUT_MS))) {
     throw new Error("Prompt injection failed; the composer did not contain the expected prompt.");
   }

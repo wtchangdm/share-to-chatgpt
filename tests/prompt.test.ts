@@ -32,15 +32,11 @@ import type { DispatchPayload } from "../src/types";
 const pageUrl = "https://example.com/articles/one?x=1&y=two#section";
 const urlOnlySettings = { ...DEFAULT_SETTINGS, optionalText: "" };
 
-test("the default prompt and deep link preserve non-tracking query parameters", () => {
+test("the default prompt preserves non-tracking query parameters", () => {
   const prompt = buildPrompt(pageUrl, DEFAULT_SETTINGS);
 
   const expected = `${pageUrl}\n\n${DEFAULT_SETTINGS.optionalText}`;
   assert.equal(prompt, expected);
-  assert.equal(
-    buildChatGPTUrl(prompt),
-    `https://chatgpt.com/?prompt=${encodeURIComponent(expected)}`
-  );
 });
 
 const trackingQueryParameters = [
@@ -169,7 +165,6 @@ test("appended optional text is separated from the URL by two newlines", () => {
   });
   const expected = `${pageUrl}\n\nExplain the risks`;
   assert.equal(prompt, expected);
-  assert.equal(new URL(buildChatGPTUrl(prompt)).searchParams.get("prompt"), expected);
 });
 
 for (const placement of ["prepend", "append"] as const) {
@@ -181,7 +176,6 @@ for (const placement of ["prepend", "append"] as const) {
       const prompt = buildPrompt(pageUrl, { optionalText, placement });
 
       assert.equal(prompt, expected);
-      assert.equal(new URL(buildChatGPTUrl(prompt)).searchParams.get("prompt"), expected);
     });
   }
 }
@@ -233,11 +227,10 @@ test("automatic submission and closing settings are restored", () => {
   );
 });
 
-test("a transient dispatch marker is added without changing the prompt query", () => {
+test("dispatch navigation contains only the marker, never a prompt query", () => {
   assert.equal(
-    buildChatGPTUrl(pageUrl, "dispatch-123"),
-    `https://chatgpt.com/?prompt=${encodeURIComponent(pageUrl)}` +
-      "#share-to-chatgpt-dispatch=dispatch-123"
+    buildChatGPTUrl("dispatch-123"),
+    "https://chatgpt.com/#share-to-chatgpt-dispatch=dispatch-123"
   );
 });
 

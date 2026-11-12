@@ -99,7 +99,7 @@ src/
   hovered-link.ts     Invocation-time hovered-link lookup for the active page
   options-model.ts    Settings load/save behavior and UI state
   options.ts          Local settings UI bindings
-  prompt.ts           Settings normalization and prompt/deep-link construction
+  prompt.ts           Settings normalization, prompt construction, and dispatch URL
   selectors.ts        Isolated ChatGPT DOM selectors
   submission.ts       Pure submission-confirmation policy
   types.ts            Settings, dispatch, and message types
@@ -120,11 +120,11 @@ No all-sites permission, paid OpenAI API, ChatGPT `/backend-api/` access, or thi
 1. The service worker reads the target URL and local settings, then applies enabled tracking-parameter cleanup before constructing the prompt.
 2. It generates a random UUID and stores a `pending` dispatch in `chrome.storage.session` before navigation. The payload retains only the generated prompt, tab IDs, timestamps, transition status, and applicable automation flags; it does not duplicate the target URL or retain the source title.
 3. It creates an inactive `about:blank` tab, persists the target tab binding and tab index, and only then navigates that tab to ChatGPT. This ordering prevents the content script from claiming a dispatch before its target binding is stored.
-4. Navigate to `https://chatgpt.com/?prompt=<encoded prompt>#share-to-chatgpt-dispatch=<UUID>`.
+4. Navigate to `https://chatgpt.com/#share-to-chatgpt-dispatch=<UUID>`. The navigation URL has no query string and contains no shared URL or prompt.
 5. The content script does nothing in ChatGPT tabs without this marker.
 6. For a marked tab, it removes the hash with `history.replaceState` and claims the matching session payload through extension messaging.
 7. The service worker verifies the sender's bound tab ID and changes the dispatch state to `claimed`.
-8. The content script verifies the expected prompt or injects it and verifies the resulting composer state.
+8. The content script waits for the composer, directly inserts the prompt from the claimed extension-local session payload, and verifies the resulting composer state exactly.
 9. If `autoSubmit` is disabled, the dispatch completes in the `claimed` state and the tab remains open.
 10. If `autoSubmit` is enabled, the content script requests the `claimed → submitting` transition before invoking submission. When auto-close is enabled, the successful transition extends the dispatch expiry to approximately 120 seconds so conversation persistence or the response-completion fallback can be verified.
 11. A successful or final failed dispatch removes its session payload and tab index. Closing the target tab also removes its state.
@@ -141,7 +141,6 @@ A pending or claimed dispatch expires approximately 15 seconds after creation. A
 
 Current bounded phases are:
 
-- Deep-link prefill grace: up to 4 seconds.
 - Prompt injection verification: up to 3 seconds.
 - Submission confirmation: up to 2 seconds.
 - Conversation-persistence and assistant-response detection for auto-close: bounded by the extended dispatch lifetime of approximately 120 seconds from arming.
@@ -196,13 +195,11 @@ Otherwise leave the tab open at timeout. Latch non-empty response detection per 
 
 ## Prompt insertion
 
-The deep link is given an opportunity to prefill the composer first.
-
-If fallback insertion is required:
+After claiming the dispatch, wait for the composer within the dispatch deadline, then directly insert the prompt from the session payload:
 
 - A textarea uses the native `HTMLTextAreaElement.prototype.value` setter and an `input` event.
 - A contenteditable composer uses selection plus `document.execCommand("insertText")`.
-- If that does not produce the expected value, the composer receives a paragraph node populated through the native `innerText` setter (which represents line breaks as `br` nodes), followed by an `input` event. Prompt text is never interpreted as HTML.
+- If native contenteditable insertion does not produce the expected value, the DOM insertion fallback gives the composer a paragraph node populated through the native `innerText` setter (which represents line breaks as `br` nodes), followed by an `input` event. Prompt text is never interpreted as HTML.
 
 The composer is read back after insertion. Submission is forbidden unless its normalized text exactly equals the expected prompt. Comparison normalizes non-breaking spaces, CRLF line endings, and surrounding whitespace only; internal line breaks and blank lines must match. Collapsed or missing paragraphs do not qualify.
 
@@ -243,11 +240,10 @@ A missing response-start marker or unverified auto-close condition after a confi
 
 ## Security and privacy
 
-- Before navigation, prompts, settings, and dispatch state are held only in local extension storage and memory. Dispatch payloads do not separately retain source titles or duplicate target URLs.
-- The temporary dispatch hash contains only a random UUID and is removed immediately.
-- The prompt remains in the `?prompt=` query because that is the existing deep-link prefill mechanism.
+- Until composer insertion, prompts, settings, and dispatch state are held only in local extension storage and memory. Dispatch payloads do not separately retain source titles or duplicate target URLs.
+- The ChatGPT navigation URL has no query string or prompt. Its temporary dispatch hash contains only a random UUID and is removed immediately.
 - Runtime messages are accepted only from `https://chatgpt.com/` tabs and are bound to the expected target tab ID.
-- The constructed prompt is sent only to `chatgpt.com` through normal page navigation. No browsing data, prompt, or ChatGPT content is sent to any other service.
+- The constructed prompt is provided to the ChatGPT page's composer even with automatic submission disabled. ChatGPT may read or save drafts before Send; disabling submission is not a data-isolation boundary. No browsing data, prompt, or ChatGPT content is sent by the extension to any other service.
 - Assistant message content is checked only for non-emptiness and is never stored.
 
 ## Manual regression checklist
@@ -257,7 +253,7 @@ Run the cases relevant to a change and report which cases were verified in the c
 - Log in to `https://chatgpt.com` normally.
 - On a non-ChatGPT page, click the toolbar button once.
 - Confirm the original tab remains selected throughout.
-- Confirm one background ChatGPT tab opens with the page URL in the composer and submits one initial message.
+- Confirm one background ChatGPT tab navigates to `https://chatgpt.com/#share-to-chatgpt-dispatch=<UUID>` without a query string or prompt in the navigation URL, removes the marker, inserts the page URL and configured Prompt into the composer, and submits one initial message.
 - Confirm no Enter key or second click is needed and the ChatGPT tab remains open when auto-close is disabled. During startup, confirm an enabled Send does not trigger submission before the scoped model selector appears and is enabled.
 - Right-click a link, choose **Send link to ChatGPT**, and confirm the linked URL—not the current page URL—is submitted.
 - Hover over a link, press the configured shortcut, and confirm the linked URL—not the current page URL—is submitted.
@@ -270,19 +266,18 @@ Run the cases relevant to a change and report which cases were verified in the c
 - Save append text, send a link, and verify `cleaned URL + two LF line breaks + text`.
 - In Options, change and save every setting, make unsaved edits, then choose **Reset to defaults**. Confirm all fields return to current defaults, automatic closing is enabled, and reopening retains defaults without a separate Save. Repeat reset and confirm unrelated local data and active dispatches remain intact.
 - In a fresh extension profile, confirm Options displays the default Prompt. Clear it, save, reopen Options, and confirm it stays empty and sharing sends only the URL. Existing custom prompts must also remain unchanged after reload.
-- Save Prompt text with multiple paragraphs, blank lines, and single line breaks; verify they survive both prepend and append, deep-link prefill, and fallback insertion. In the current contenteditable editor, verify direct paragraphs, empty-paragraph placeholders, and inline URL labels/icons compare as logical text, without accepting mismatched link targets, missing blank lines, or collapsed text. Repeat with automatic submission disabled, then enabled, verifying one correctly formatted message and no collapsed paragraphs. If exact formatting cannot be verified, confirm the tab stays open without submission.
+- Save Prompt text with multiple paragraphs, blank lines, and single line breaks; verify they survive both prepend and append through native insertion and the DOM insertion fallback. In the current contenteditable editor, verify direct paragraphs, empty-paragraph placeholders, and inline URL labels/icons compare as logical text, without accepting mismatched link targets, missing blank lines, or collapsed text. Repeat with automatic submission disabled, then enabled, verifying one correctly formatted message and no collapsed paragraphs. If exact formatting cannot be verified, confirm the tab stays open without submission.
 - Trigger two dispatches close together and verify each target tab submits its own prompt once.
 - Log out of ChatGPT or block the composer, dispatch again, and confirm no prompt is submitted, the tab remains open, and a red `!` badge or error appears.
 - Open an unrelated ChatGPT tab and confirm it does not auto-submit anything.
 - Disable automatic submission and confirm the correct prompt is prefilled but not submitted.
 - In a fresh profile, confirm automatic closing is checked. Save it off, reload Options, and confirm it remains off. Disable automatic submission and confirm the closing control is disabled without losing its saved preference. With automatic submission on and the default automatic closing on, confirm the background tab remains open on temporary paths such as `/c/local-chatgpt%3A<UUID>`, then closes after a canonical `/c/<UUID>` path appears while the enabled form-scoped Stop button is present, without waiting for assistant text or the full response. Reopen that exact conversation and verify it loads with a non-empty response.
 - On the observed ChatGPT UI with a form-scoped contenteditable textbox and no composer ID, confirm one submission and automatic closing after a canonical `/c/<UUID>` path and new non-empty assistant markdown appear, even without a recognized Stop button or finalized message IDs. When the app retains an inactive home page or conversation, confirm only the active page supplies the composer and response evidence, and DOM observation follows active-page switches even when the old main remains connected.
-- Repeat with no deep-link prefill and confirm fallback insertion is recognized by ChatGPT, submitted once, and followed by early closing and successful reopening.
 - Confirm user text and empty assistant placeholders do not trigger closing; temporary conversation paths without a verified streaming-completion transition remain open.
 - Reload the extension and confirm automation settings retain their saved values.
 
 ## Inherently fragile behavior
 
-ChatGPT's composer markup, React/contenteditable behavior, deep-link prefill support, test IDs, submission controls, and assistant-message attributes are not public APIs. Account-specific experiments, localization, login challenges, or future DOM changes can break these integrations.
+ChatGPT's composer markup, React/contenteditable behavior, test IDs, submission controls, and assistant-message attributes are not public APIs. Account-specific experiments, localization, login challenges, or future DOM changes can break these integrations.
 
 Selector failures must remain narrow and fail closed. When ChatGPT changes its DOM, update `src/selectors.ts` using observed markup rather than adding broad page-wide text matching.

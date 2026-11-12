@@ -284,7 +284,7 @@ async function createDispatch(
   await startSourceStatus(dispatch);
 
   try {
-    const url = buildChatGPTUrl(prompt, dispatch.id);
+    const url = buildChatGPTUrl(dispatch.id);
     const createdTab = await chrome.tabs.create({
       url: "about:blank",
       active: false

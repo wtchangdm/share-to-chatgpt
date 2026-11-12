@@ -41,10 +41,10 @@ Saved preferences, including empty prompts and disabled automatic closing, are p
 
 ## Privacy and compatibility
 
-- Sharing sends the URL and prompt to ChatGPT **even with automatic submission off**, through the navigation URL. Browser history and ChatGPT may retain them. Do not share confidential links or sensitive text; tracking cleanup is not a sensitive-data scrubber.
+- Sharing provides the URL and prompt to the ChatGPT page's composer **even with automatic submission off**. They are not included in the ChatGPT navigation URL, but ChatGPT may read or save drafts before Send. Do not share confidential links or sensitive text; tracking cleanup is not a sensitive-data scrubber.
 - Settings and temporary dispatch state stay in local extension storage. The extension sends data only to ChatGPT, does not upload page content, and never stores assistant responses. The shortcut uses temporary `activeTab` access, not persistent all-sites access. See [PRIVACY.md](PRIVACY.md).
 - The default prompt's memory guidance is not enforced isolation. This extension opens regular chats and does not change ChatGPT settings; the article remains in conversation context. For stronger control, use [Memory settings](https://help.openai.com/en/articles/8590148-memory-in-chatgpt) or manually start a [Temporary Chat](https://help.openai.com/en/articles/8914046-temporary-chat-in-chatgpt).
-- Only the current ChatGPT frontend is supported; DOM and deep-link changes can break integration. Unverified prompts or controls prevent submission; uncertain closing conditions leave the tab open. Early closing cannot guarantee continued generation—disable it if you need the tab to remain open.
+- Only the current ChatGPT frontend is supported; DOM changes can break integration. Unverified prompts or controls prevent submission; uncertain closing conditions leave the tab open. Early closing cannot guarantee continued generation—disable it if you need the tab to remain open.
 - Hovered links work in normal content and open Shadow DOM, not closed Shadow DOM or child frames.
 
 Independent of OpenAI; normal ChatGPT access and usage limits apply.

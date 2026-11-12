@@ -308,7 +308,7 @@ test("only canonical UUID conversation paths count as persisted", () => {
   assert.equal(isPersistedConversationPath("/"), false);
 });
 
-test("the dispatch marker is consumed without changing the prompt query", () => {
+test("the dispatch marker is consumed, leaving the clean homepage", () => {
   const originalLocation = Object.getOwnPropertyDescriptor(globalThis, "location");
   const originalHistory = Object.getOwnPropertyDescriptor(globalThis, "history");
   const replacements: string[] = [];
@@ -317,7 +317,7 @@ test("the dispatch marker is consumed without changing the prompt query", () => 
     value: {
       hash: "#share-to-chatgpt-dispatch=dispatch%2D123",
       pathname: "/",
-      search: `?prompt=${encodeURIComponent(prompt)}`
+      search: ""
     }
   });
   Object.defineProperty(globalThis, "history", {
@@ -332,7 +332,7 @@ test("the dispatch marker is consumed without changing the prompt query", () => 
 
   try {
     assert.equal(takeDispatchId(), "dispatch-123");
-    assert.deepEqual(replacements, [`/?prompt=${encodeURIComponent(prompt)}`]);
+    assert.deepEqual(replacements, ["/"]);
   } finally {
     if (originalLocation) {
       Object.defineProperty(globalThis, "location", originalLocation);
@@ -347,7 +347,7 @@ test("the dispatch marker is consumed without changing the prompt query", () => 
   }
 });
 
-test("textarea fallback injection is read back with exact prompt verification", () => {
+test("textarea insertion is read back with exact prompt verification", () => {
   const dom = installDom();
   try {
     insertPrompt(dom.textarea as unknown as HTMLTextAreaElement, prompt);
@@ -367,13 +367,46 @@ test("textarea fallback injection is read back with exact prompt verification", 
   }
 });
 
+for (const autoSubmit of [false, true]) {
+  test(`an empty composer is populated directly (autoSubmit=${autoSubmit})`, async () => {
+    const dom = installDom();
+    const messages: string[] = [];
+    const dispatch = claimedDispatch({
+      autoSubmit, autoClose: false, expiresAt: Date.now() + 100
+    });
+    const originalChrome = globalThis.chrome;
+    dom.form.onSubmit = () => {
+      assert.equal(dom.textarea.value, prompt);
+      dom.textarea.value = "";
+    };
+    Object.defineProperty(globalThis, "chrome", {
+      configurable: true,
+      value: { runtime: { async sendMessage(message: { type: string }): Promise<DispatchResponse> {
+        messages.push(message.type);
+        return message.type === "claim-dispatch" ? { ok: true, dispatch } : { ok: true };
+      } } }
+    });
+    try {
+      await runDispatch(dispatch.id);
+      assert.deepEqual(messages, autoSubmit
+        ? ["claim-dispatch", "arm-dispatch", "complete-dispatch"]
+        : ["claim-dispatch", "complete-dispatch"]);
+      assert.equal(dom.textarea.inputEvents.length, 1);
+      assert.equal(dom.button.clickCount, autoSubmit ? 1 : 0);
+      assert.equal(dom.textarea.value, autoSubmit ? "" : prompt);
+    } finally {
+      Object.defineProperty(globalThis, "chrome", { configurable: true, value: originalChrome });
+      dom.restore();
+    }
+  });
+}
+
 for (const modelState of ["missing", "disabled"] as const) {
   test(`an enabled Send cannot submit while the model control is ${modelState}`, async () => {
     const dom = installDom();
     const messages: string[] = [];
     const dispatch = claimedDispatch({ autoClose: false, expiresAt: Date.now() + 50 });
     const originalChrome = globalThis.chrome;
-    dom.textarea.value = prompt;
     dom.form.modelButtonAvailable = modelState !== "missing";
     dom.form.modelButton.disabled = modelState === "disabled";
     dom.form.onSubmit = () => { dom.textarea.value = ""; };
@@ -401,7 +434,6 @@ test("submission invokes the Send click handler once, not requestSubmit", async 
   const messages: string[] = [];
   const dispatch = claimedDispatch({ autoClose: false });
   const originalChrome = globalThis.chrome;
-  dom.textarea.value = prompt;
   dom.form.onSubmit = () => { dom.textarea.value = ""; };
   Object.defineProperty(globalThis, "chrome", {
     configurable: true,
@@ -425,7 +457,6 @@ test("an incomplete assistant response leaves the submitted tab open", async () 
   const dom = installDom();
   const closeRequests: boolean[] = [];
   const dispatch = claimedDispatch({ expiresAt: Date.now() + 700 });
-  dom.textarea.value = prompt;
   dom.form.onSubmit = () => {
     dom.textarea.value = "";
     dom.button.disabled = true;
@@ -474,7 +505,6 @@ for (const change of ["prompt", "send-button", "model-button"] as const) {
     const dom = installDom();
     const messages: string[] = [];
     const dispatch = claimedDispatch({ expiresAt: Date.now() + 800, autoClose: false });
-    dom.textarea.value = prompt;
     const originalChrome = globalThis.chrome;
     Object.defineProperty(globalThis, "chrome", {
       configurable: true,
@@ -520,7 +550,6 @@ for (const scenario of [
       expiresAt: Date.now() + 1_100,
       autoClose: scenario.autoClose
     });
-    dom.textarea.value = prompt;
     dom.assistantMessages.push(new FakeAssistantMarkdown("Earlier response"));
     dom.form.onSubmit = () => {
       dom.textarea.value = "";
@@ -582,7 +611,6 @@ test("a canonical conversation closes as soon as the response starts", async () 
     stopAvailable: boolean;
   }> = [];
   const dispatch = claimedDispatch({ expiresAt: Date.now() + 1_500 });
-  dom.textarea.value = prompt;
   dom.form.onSubmit = () => {
     dom.textarea.value = "";
     dom.button.disabled = true;

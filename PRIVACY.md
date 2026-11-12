@@ -16,7 +16,7 @@ The extension uses your signed-in ChatGPT session without reading authentication
 
 ## Transmission
 
-Sharing navigates a background tab to `https://chatgpt.com/` over HTTPS, sending the URL and prompt in the `prompt` query parameter **even when automatic submission is disabled**. Enabled submission sends the verified prompt through ChatGPT's normal interface.
+Sharing navigates a background tab to `https://chatgpt.com/` over HTTPS with only a temporary random dispatch ID in the URL fragment, not the shared URL or prompt. The extension retrieves the prompt from extension-local session state and inserts it into the ChatGPT page's composer **even when automatic submission is disabled**. ChatGPT may read or save drafts before Send; disabling submission does not keep the prompt private from ChatGPT. Enabled submission sends the verified prompt through ChatGPT's normal interface.
 
 OpenAI processes this information under its [privacy policy](https://openai.com/policies/privacy-policy/) and your account settings. ChatGPT may access the linked page; the extension sends only its URL, not a page copy.
 
@@ -28,7 +28,7 @@ Preferences remain until changed, local extension data is cleared, or the extens
 
 Dispatch payloads are removed on completion, final failure, or target-tab closure. They expire after approximately 15 seconds, or approximately 120 seconds from arming an automatic-close request. Cleanup runs during dispatch handling and service-worker startup; worker suspension may delay removal. Chrome clears session storage when the browser session ends or the extension is disabled, reloaded, or updated.
 
-Browser history or ChatGPT may retain the prompt-bearing URL. Clearing extension data, uninstalling, or closing a tab does not delete history or conversations; manage those separately in Chrome and ChatGPT.
+The ChatGPT navigation URL does not contain the shared URL or prompt. ChatGPT may retain drafts or submitted conversations under its own policies and settings. Clearing extension data, uninstalling, or closing a tab does not delete browser history or ChatGPT data; manage those separately in Chrome and ChatGPT.
 
 Options can disable submission, closing, or tracking cleanup. Submission and closing default to on; saved on/off choices are preserved. Closing requires submission, does not wait for the full answer, and cannot guarantee continued generation.
 

@@ -164,9 +164,9 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
 
     assert.deepEqual(createdTabs[0], { url: "about:blank", active: false });
     assert.equal(updatedTabs[0]?.tabId, 20);
-    assert.match(
-      updatedTabs[0]?.properties.url as string,
-      /^https:\/\/chatgpt\.com\/\?prompt=/
+    assert.equal(
+      updatedTabs[0]?.properties.url,
+      `https://chatgpt.com/#share-to-chatgpt-dispatch=${updatedTabs[0]?.dispatchAtNavigation?.id}`
     );
     assert.equal(updatedTabs[0]?.dispatchAtNavigation?.targetTabId, 20);
     assert.equal(updatedTabs[0]?.dispatchAtNavigation?.status, "pending");
