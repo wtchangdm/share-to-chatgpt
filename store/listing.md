@@ -23,7 +23,7 @@ In Options:
 
 To start, install and pin the extension, sign in to chatgpt.com, and open Options from the extension icon's context menu. Review preferences before sharing a public page or link.
 
-**Privacy:** Sharing provides the URL and prompt to the ChatGPT page's composer even with submission off. They are not included in the ChatGPT navigation URL, but ChatGPT may read or save drafts before Send. Preferences stay local; delivery state is temporary. There is no developer data server, telemetry, advertising, or data sales, and assistant responses are never stored. Avoid confidential URLs and sensitive prompts; tracking cleanup is not a sensitive-data scrubber. See the linked privacy policy.
+**Privacy:** Sharing sends the URL and prompt to ChatGPT over HTTPS even with submission off. Preferences stay local; delivery state is temporary. There is no developer data server, telemetry, advertising, or data sales, and assistant responses are never stored. Avoid confidential URLs and sensitive prompts; tracking cleanup is not a sensitive-data scrubber. See the linked privacy policy.
 
 **Compatibility:** Chrome 120+ and a signed-in ChatGPT session required. No API key; normal ChatGPT limits apply. This independent extension is not affiliated with or endorsed by OpenAI. ChatGPT's interface can change; unverifiable prompts or controls leave the tab open without uncertain submission.
 
@@ -81,7 +81,7 @@ Requires Chrome 120+ and the reviewer's signed-in ChatGPT account. No extension 
 1. Sign in to https://chatgpt.com/. In Options, set Prompt to `Reply with only OK.`, keep submission on, and turn closing off (both default on).
 2. Open https://example.com/ and click the toolbar once. The source stays selected; one background tab submits one prompt containing the URL and instruction, then stays open.
 3. Test a public link's context menu and the shortcut with/without a hovered link. Each invocation shares the intended URL once. If Chrome reserves the shortcut, assign another at chrome://extensions/shortcuts.
-4. Disable submission and share: the prompt is inserted into the composer but not submitted. It is absent from the navigation URL, but the ChatGPT page can still read or save the draft.
+4. Disable submission and share: prefill only, though navigation still sends the prompt to ChatGPT.
 5. Enable submission and closing; share again. Close only after the documented conversation/response signals; uncertainty or timeout leaves the tab open. Reopen from ChatGPT history and verify a response.
 6. Confirm unrelated ChatGPT tabs are not auto-submitted; logged-out or missing-composer states must not submit uncertain content.
 7. Restore desired settings. Keep conversation content out of review logs.

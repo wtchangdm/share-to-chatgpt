@@ -20,6 +20,8 @@ Omit inapplicable categories, generic caveats, repeated conclusions, process pre
   autoClose: true
 };
 
+const CHATGPT_BASE_URL = "https://chatgpt.com/";
+
 const TRACKING_QUERY_PARAMETERS = [
   "utm_id",
   "utm_source",
@@ -140,6 +142,9 @@ export function buildPrompt(
     : `${optionalText} ${targetUrl}`;
 }
 
-export function buildChatGPTUrl(dispatchId: string): string {
-  return `https://chatgpt.com/#share-to-chatgpt-dispatch=${encodeURIComponent(dispatchId)}`;
+export function buildChatGPTUrl(prompt: string, dispatchId?: string): string {
+  const deepLink = `${CHATGPT_BASE_URL}?prompt=${encodeURIComponent(prompt)}`;
+  return dispatchId
+    ? `${deepLink}#share-to-chatgpt-dispatch=${encodeURIComponent(dispatchId)}`
+    : deepLink;
 }

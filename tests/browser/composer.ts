@@ -21,8 +21,8 @@ export function checkComposerInsertion(): { checks: number; browser: string } {
     composer.style.whiteSpace = "break-spaces";
     document.body.append(composer);
     try {
-      // Observed ChatGPT editor paragraphs include empty-paragraph placeholders,
-      // unlike the single <p> produced by the DOM insertion fallback.
+      // Observed live ChatGPT deep-link prefill: paragraphs with an empty
+      // paragraph placeholder, not the single <p> produced by our fallback.
       composer.innerHTML = '<p>First paragraph.</p><p data-empty-paragraph="true">' +
         '<br class="ProseMirror-trailingBreak"></p><p>Second paragraph.</p>';
       verify(composerHasPrompt(composer, "First paragraph.\n\nSecond paragraph."),
@@ -218,10 +218,9 @@ export async function checkActivePageSelectors(): Promise<{ checks: number }> {
 }
 
 export async function benchmarkSubmission(): Promise<object> {
-  // Include preparation of an empty composer, not a pre-populated fixture.
-  const iterations = 1;
-  const samples = 5;
-  const warmup = 1;
+  const iterations = 100;
+  const samples = 7;
+  const warmup = 100;
   const fixture = document.createElement("div");
   fixture.setAttribute("data-app-shell-active-page", "true");
   fixture.innerHTML = '<main><form><textarea name="prompt"></textarea>' +
@@ -255,7 +254,7 @@ export async function benchmarkSubmission(): Promise<object> {
   });
   const run = async (count: number): Promise<void> => {
     for (let index = 0; index < count; index += 1) {
-      textarea.value = "";
+      textarea.value = prompt;
       dispatch = {
         id: "benchmark", prompt, status: "claimed", createdAt: Date.now(),
         expiresAt: Date.now() + 15_000, autoSubmit: true, autoClose: false
