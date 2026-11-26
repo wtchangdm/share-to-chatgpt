@@ -8,7 +8,7 @@ export interface Settings {
   autoClose: boolean;
 }
 
-export type DispatchStatus = "pending" | "claimed" | "submitting";
+export type DispatchStatus = "pending" | "claimed" | "submitting" | "confirmed";
 
 export interface DispatchPayload {
   id: string;
@@ -22,33 +22,16 @@ export interface DispatchPayload {
   autoClose: boolean;
 }
 
-export interface ClaimDispatchMessage {
-  type: "claim-dispatch";
-  dispatchId: string;
-}
+export type ContentMessage = { dispatchId: string } & (
+  | { type: "claim-dispatch" }
+  | { type: "check-insertion" }
+  | { type: "arm-dispatch" }
+  | { type: "confirm-dispatch" }
+  | { type: "complete-dispatch"; closeTab: boolean; closePath?: string }
+  | { type: "fail-dispatch"; error: string }
+);
 
-export interface ArmDispatchMessage {
-  type: "arm-dispatch";
-  dispatchId: string;
-}
-
-export interface CompleteDispatchMessage {
-  type: "complete-dispatch";
-  dispatchId: string;
-  closeTab: boolean;
-}
-
-export interface FailDispatchMessage {
-  type: "fail-dispatch";
-  dispatchId: string;
-  error: string;
-}
-
-export type ContentMessage =
-  | ClaimDispatchMessage
-  | ArmDispatchMessage
-  | CompleteDispatchMessage
-  | FailDispatchMessage;
+export type CompleteDispatchMessage = Extract<ContentMessage, { type: "complete-dispatch" }>;
 
 export type DispatchResponse =
   | { ok: true; dispatch?: DispatchPayload }

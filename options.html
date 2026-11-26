@@ -12,11 +12,11 @@
       <p>The toolbar button opens a background ChatGPT tab immediately. Your prompt is added before or after each shared page or link URL.</p>
       <form id="settings-form">
         <label for="optional-text">Prompt</label>
-        <textarea id="optional-text" rows="10" aria-describedby="prompt-help"></textarea>
+        <textarea id="optional-text" rows="10" aria-describedby="prompt-help" disabled></textarea>
         <p id="prompt-help">Leave empty to send only the URL. Line breaks and blank lines are preserved.</p>
 
         <label for="placement">Placement</label>
-        <select id="placement">
+        <select id="placement" disabled>
           <option value="prepend">Before the URL</option>
           <option value="append">After the URL</option>
         </select>
@@ -28,6 +28,7 @@
               id="strip-tracking-parameters"
               type="checkbox"
               aria-describedby="strip-tracking-help"
+              disabled
             >
             Remove common tracking parameters from shared URLs
           </label>
@@ -39,19 +40,20 @@
         <fieldset>
           <legend>Automation</legend>
           <label class="checkbox" for="auto-submit">
-            <input id="auto-submit" type="checkbox">
+            <input id="auto-submit" type="checkbox" disabled>
             Automatically submit the prompt
           </label>
           <label class="checkbox" for="auto-close">
-            <input id="auto-close" type="checkbox">
+            <input id="auto-close" type="checkbox" disabled>
             Close after ChatGPT assigns a conversation URL and starts responding
           </label>
         </fieldset>
 
         <div class="actions">
-          <button type="submit">Save</button>
-          <button id="reset-settings" type="button">Reset to defaults</button>
-          <output id="status" aria-live="polite"></output>
+          <button id="save-settings" type="submit" disabled>Save</button>
+          <button id="reset-settings" type="button" disabled>Reset to defaults</button>
+          <button id="retry-load" type="button" hidden>Retry loading settings</button>
+          <output id="status" aria-live="polite">Loading settings…</output>
         </div>
       </form>
     </main>

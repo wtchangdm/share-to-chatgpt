@@ -24,6 +24,45 @@ const defaultErrorReporter: ErrorReporter = (message, error) => {
   console.error(message, error);
 };
 
+type OptionsAccess = "busy" | "ready" | "unavailable";
+
+export function createOptionsActions(
+  fields: OptionsFields,
+  storage: SettingsStorage,
+  scheduleClear: ScheduleClear,
+  showAccess: (state: OptionsAccess) => void,
+  reportError: ErrorReporter = defaultErrorReporter
+) {
+  let access: OptionsAccess = "unavailable";
+  function setAccess(next: OptionsAccess): void {
+    access = next;
+    showAccess(next);
+  }
+  return {
+    async load(): Promise<void> {
+      if (access !== "unavailable") return;
+      setAccess("busy");
+      fields.status.textContent = "Loading settings…";
+      const loaded = await loadOptions(fields, storage, reportError);
+      if (loaded) fields.status.textContent = "";
+      setAccess(loaded ? "ready" : "unavailable");
+    },
+    async reset(): Promise<void> {
+      if (access === "busy") return;
+      const previous = access;
+      setAccess("busy");
+      const restored = await resetOptions(fields, storage, scheduleClear, reportError);
+      setAccess(restored ? "ready" : previous);
+    },
+    async save(): Promise<void> {
+      if (access !== "ready") return;
+      setAccess("busy");
+      await saveOptions(fields, storage, scheduleClear, reportError);
+      setAccess("ready");
+    }
+  };
+}
+
 export function syncAutoCloseAvailability(fields: OptionsFields): void {
   fields.autoClose.disabled = !fields.autoSubmit.checked;
 }

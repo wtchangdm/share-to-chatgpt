@@ -393,7 +393,8 @@ function pendingDispatch(overrides: Partial<DispatchPayload> = {}): DispatchPayl
 }
 
 test("a dispatch can be claimed once only by its target tab", () => {
-  const firstClaim = claimDispatch(pendingDispatch(), 20);
+  const firstClaim = claimDispatch(pendingDispatch({ targetTabId: 20 }), 20);
+  assert.equal(claimDispatch(pendingDispatch(), 20).ok, false);
   assert.equal(firstClaim.ok, true);
   if (!firstClaim.ok) {
     return;
@@ -422,12 +423,13 @@ test("expired dispatch cleanup ignores live dispatches and tab indexes", () => {
 });
 
 test("dispatch submission follows the one-way state machine", () => {
-  assert.deepEqual(armDispatch(pendingDispatch(), 20), {
+  assert.deepEqual(armDispatch(pendingDispatch({ targetTabId: 20 }), 20), {
     ok: false,
     error: "Dispatch is not ready to submit."
   });
 
   const claimed = pendingDispatch({ status: "claimed", targetTabId: 20 });
+  assert.equal(armDispatch({ ...claimed, autoSubmit: false }, 20).ok, false);
   const armed = armDispatch(claimed, 20);
   assert.equal(armed.ok, true);
   if (!armed.ok) {
@@ -463,6 +465,16 @@ test("unreadable composer text is not evidence that the expected prompt was clea
       composerHasExpectedPrompt: null,
       sendButtonEnabled
     }), false);
+  }
+});
+
+test("the action title distinguishes a target takeover from a navigation failure", () => {
+  for (const detail of [
+    "The target tab was activated; refusing to automate it.",
+    "Could not open ChatGPT: The target tab was activated.",
+    "The background target or its expected conversation route changed."
+  ]) {
+    assert.equal(getFailureActionTitle(detail), "Share to ChatGPT: stopped because the target tab was opened or changed");
   }
 });
 

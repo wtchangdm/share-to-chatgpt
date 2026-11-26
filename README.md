@@ -23,7 +23,7 @@ Reload the extension after rebuilding.
 - **Link context menu → Send link to ChatGPT:** share that link.
 - **Command+B** (macOS) / **Ctrl+B** (other platforms): share the hovered link, or the current page if none is hovered. Customize at `chrome://extensions/shortcuts`.
 
-The source tab stays active. Its extension badge shows blue `…` while sharing, brief green `✓` on completion, or red `!` on failure. Hover the icon for a failure category; status resets on navigation.
+The source tab stays active. Opening the ChatGPT tab stops any pending send or automatic close. The extension won’t replace a different draft. The source badge shows blue `…` while sharing, brief green `✓` on completion, or red `!` on failure. Hover for the failure category; navigation clears the badge.
 
 ### Options
 
@@ -36,6 +36,8 @@ Right-click the extension icon → **Options**.
 | Remove tracking parameters | On | Removes [known tracking parameters](spec.md#tracking-parameter-cleanup), preserving other query data and fragments. Disable if cleanup breaks a signed or single-use link. |
 | Automatically submit | On | Turn off to prefill without submitting. |
 | Close automatically | On | Requires automatic submission. Closes once ChatGPT assigns a conversation URL and starts responding; if no canonical URL appears, response completion is the fallback. Waits up to about two minutes, not necessarily for the full answer. |
+
+If settings don’t load, choose **Retry loading settings**. Save stays disabled to protect your preferences.
 
 Saved preferences, including empty prompts and disabled automatic closing, are preserved. **Reset to defaults** immediately saves all defaults, replacing saved preferences and unsaved edits without clearing active dispatches or unrelated local data. See the [settings contract and default prompt](spec.md#settings).
 

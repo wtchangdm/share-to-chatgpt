@@ -23,6 +23,12 @@ const bundle = await build({
 });
 try {
   browser(["open", "about:blank", "--session", session, "--json"]);
+  // Fulfill the new-chat root locally. Chromium supplies real history/navigation
+  // events and visibility without reaching ChatGPT or needing a test server.
+  if (!process.argv.includes("--benchmark")) {
+    browser(["network", "route", "http://127.0.0.1/*", "--body", "{}", "--session", session, "--json"]);
+    browser(["open", "http://127.0.0.1/", "--session", session, "--json"]);
+  }
   const output = JSON.parse(browser(
     ["eval", "--stdin", "--session", session, "--json"],
     `${bundle.outputFiles[0].text}\n${process.argv.includes("--benchmark-submission")
@@ -30,7 +36,8 @@ try {
       : process.argv.includes("--benchmark")
       ? "composerChecks.benchmarkComposerReading()"
       : "(async () => ({ insertion: composerChecks.checkComposerInsertion(), " +
-        "activePage: await composerChecks.checkActivePageSelectors() }))()"};`
+        "activePage: await composerChecks.checkActivePageSelectors(), " +
+        "takeover: await composerChecks.checkSubmissionTakeover() }))()"};`
   ));
   if (!output.success) throw new Error(JSON.stringify(output.error));
   console.log(JSON.stringify(output.data.result));

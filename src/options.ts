@@ -1,7 +1,5 @@
 import {
-  loadOptions,
-  resetOptions,
-  saveOptions,
+  createOptionsActions,
   syncAutoCloseAvailability,
   type OptionsFields
 } from "./options-model";
@@ -38,6 +36,21 @@ function getOptionsFields(): BrowserOptionsFields {
 }
 
 const fields = getOptionsFields();
+const saveButton = getRequiredElement("#save-settings", HTMLButtonElement);
+const resetButton = getRequiredElement("#reset-settings", HTMLButtonElement);
+const retryButton = getRequiredElement("#retry-load", HTMLButtonElement);
+const actions = createOptionsActions(fields, chrome.storage.local, window.setTimeout.bind(window), (state) => {
+  const locked = state !== "ready";
+  fields.optionalText.disabled = locked;
+  fields.placement.disabled = locked;
+  fields.stripTrackingParameters.disabled = locked;
+  fields.autoSubmit.disabled = locked;
+  fields.autoClose.disabled = locked || !fields.autoSubmit.checked;
+  saveButton.disabled = locked;
+  resetButton.disabled = state === "busy";
+  retryButton.hidden = state !== "unavailable";
+});
+
 fields.autoSubmit.addEventListener("change", () => {
   syncAutoCloseAvailability(fields);
 });
@@ -45,12 +58,9 @@ fields.autoSubmit.addEventListener("change", () => {
 const form = getRequiredElement("#settings-form", HTMLFormElement);
 form.addEventListener("submit", (event) => {
   event.preventDefault();
-  void saveOptions(fields, chrome.storage.local, window.setTimeout.bind(window));
+  void actions.save();
 });
+resetButton.addEventListener("click", () => { void actions.reset(); });
+retryButton.addEventListener("click", () => { void actions.load(); });
 
-const resetButton = getRequiredElement("#reset-settings", HTMLButtonElement);
-resetButton.addEventListener("click", () => {
-  void resetOptions(fields, chrome.storage.local, window.setTimeout.bind(window));
-});
-
-void loadOptions(fields, chrome.storage.local);
+void actions.load();

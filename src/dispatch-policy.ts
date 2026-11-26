@@ -6,54 +6,31 @@ export type DispatchTransition =
   | { ok: true; dispatch: DispatchPayload }
   | { ok: false; error: string };
 
-function belongsToTab(dispatch: DispatchPayload, tabId: number): boolean {
-  return dispatch.targetTabId === undefined || dispatch.targetTabId === tabId;
+function advance(
+  dispatch: DispatchPayload, tabId: number, ready: boolean, status: DispatchPayload["status"], error: string
+): DispatchTransition {
+  if (dispatch.targetTabId !== tabId) return { ok: false, error: "Dispatch belongs to a different tab." };
+  if (!ready) return { ok: false, error };
+  return { ok: true, dispatch: { ...dispatch, status } };
 }
 
-export function claimDispatch(
-  dispatch: DispatchPayload,
-  tabId: number
-): DispatchTransition {
-  if (!belongsToTab(dispatch, tabId)) {
-    return { ok: false, error: "Dispatch belongs to a different tab." };
-  }
-  if (dispatch.status !== "pending") {
-    return { ok: false, error: "Dispatch was already claimed." };
-  }
-
-  return {
-    ok: true,
-    dispatch: {
-      ...dispatch,
-      targetTabId: tabId,
-      status: "claimed"
-    }
-  };
+export function claimDispatch(dispatch: DispatchPayload, tabId: number): DispatchTransition {
+  return advance(dispatch, tabId, dispatch.status === "pending", "claimed", "Dispatch was already claimed.");
 }
 
-export function armDispatch(
-  dispatch: DispatchPayload,
-  tabId: number
-): DispatchTransition {
-  if (!belongsToTab(dispatch, tabId)) {
-    return { ok: false, error: "Dispatch belongs to a different tab." };
-  }
-  if (dispatch.status !== "claimed") {
-    return { ok: false, error: "Dispatch is not ready to submit." };
-  }
+export function armDispatch(dispatch: DispatchPayload, tabId: number): DispatchTransition {
+  return advance(dispatch, tabId, dispatch.status === "claimed" && dispatch.autoSubmit,
+    "submitting", "Dispatch is not ready to submit.");
+}
 
-  return {
-    ok: true,
-    dispatch: {
-      ...dispatch,
-      targetTabId: tabId,
-      status: "submitting"
-    }
-  };
+export function confirmDispatch(dispatch: DispatchPayload, tabId: number): DispatchTransition {
+  return advance(dispatch, tabId, dispatch.status === "submitting" && dispatch.autoSubmit && dispatch.autoClose,
+    "confirmed", "Dispatch is not awaiting submission confirmation.");
 }
 
 export function canCompleteDispatch(dispatch: DispatchPayload): boolean {
-  return dispatch.status === "submitting" ||
+  return (dispatch.status === "confirmed" && dispatch.autoSubmit && dispatch.autoClose) ||
+    (dispatch.status === "submitting" && dispatch.autoSubmit && !dispatch.autoClose) ||
     (dispatch.status === "claimed" && !dispatch.autoSubmit);
 }
 

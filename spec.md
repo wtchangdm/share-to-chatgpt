@@ -18,6 +18,8 @@ The **Send link to ChatGPT** menu item appears for links and follows the same wo
 
 When invoked with `Command+B` on macOS or `Ctrl+B` on other platforms, the shortcut uses the resolved URL of a link hovered in the active page. If no link is hovered, it uses the current page URL instead. The command queries only `a[href]:hover` in the main frame at invocation time, recursively follows open shadow roots on the hovered element path, and chooses the deepest matching anchor before falling back to `document.location.href`. It does not inspect closed shadow roots or child frames. Injection failures produce a local console error and a red `!` badge on the active tab.
 
+Start injection before any storage or badge work. Use the shared pre-dispatch expiry sweep only once.
+
 The shortcut is a suggested default, not a setting stored by the extension. Users can customize or disable it through `chrome://extensions/shortcuts`.
 
 ## Settings
@@ -38,7 +40,7 @@ Prompt construction trims surrounding whitespace, normalizes CRLF/CR to LF, and 
 - Prepend: `<Prompt> <URL>` (one space).
 - Append: `<URL>\n\n<Prompt>` (two LF line breaks).
 
-Loading never writes settings. Missing/invalid placement defaults to `"append"`; valid saved choices are preserved. Keep the `optionalText` storage key: missing/non-string values use the default prompt, while all saved strings—including empty or whitespace-only values—are preserved.
+Loading never writes settings. Disable editing and Save until preferences load or the user explicitly restores defaults. A read failure offers Retry without writing. Do not overlap loading, saving, and resetting. Missing/invalid placement defaults to `"append"`; valid saved choices are preserved. Keep the `optionalText` storage key: missing/non-string values use the default prompt, while all saved strings—including empty or whitespace-only values—are preserved.
 
 The Options **Reset to defaults** button immediately writes all current default settings under the existing `settings` key and updates every form field, including automatic-close availability. No separate Save is required. It replaces saved preferences and unsaved edits but leaves unrelated local storage and session dispatch state untouched. Repeated resets are safe. A failed write leaves the fields and saved preferences unchanged, reports a local error, and shows `Could not reset settings.`; success shows `Defaults restored.` for approximately two seconds.
 
@@ -119,7 +121,7 @@ No all-sites permission, paid OpenAI API, ChatGPT `/backend-api/` access, or thi
 
 1. The service worker reads the target URL and local settings, then applies enabled tracking-parameter cleanup before constructing the prompt.
 2. It generates a random UUID and stores a `pending` dispatch in `chrome.storage.session` before navigation. The payload retains only the generated prompt, tab IDs, timestamps, transition status, and applicable automation flags; it does not duplicate the target URL or retain the source title.
-3. It creates an inactive `about:blank` tab, persists the target tab binding and tab index, and only then navigates that tab to ChatGPT. This ordering prevents the content script from claiming a dispatch before its target binding is stored.
+3. It creates an inactive `about:blank` tab, writes the target tab index before the bound payload, then navigates to ChatGPT. Messages require both bindings. From creation through the final close decision, even a brief target activation vetoes further insertion, submission, or closing. The worker remembers activation in session storage across restarts; if that write fails it revokes the tab index. Unrelated activations are not persisted.
 4. Navigate to `https://chatgpt.com/?prompt=<encoded prompt>#share-to-chatgpt-dispatch=<UUID>`.
 5. The content script does nothing in ChatGPT tabs without this marker.
 6. For a marked tab, it removes the hash with `history.replaceState` and claims the matching session payload through extension messaging.
@@ -127,17 +129,18 @@ No all-sites permission, paid OpenAI API, ChatGPT `/backend-api/` access, or thi
 8. The content script verifies the expected prompt or injects it and verifies the resulting composer state.
 9. If `autoSubmit` is disabled, the dispatch completes in the `claimed` state and the tab remains open.
 10. If `autoSubmit` is enabled, the content script requests the `claimed → submitting` transition before invoking submission. When auto-close is enabled, the successful transition extends the dispatch expiry to approximately 120 seconds so conversation persistence or the response-completion fallback can be verified.
-11. A successful or final failed dispatch removes its session payload and tab index. Closing the target tab also removes its state.
+11. For auto-close, begin observing the response in the DOM read that confirms submission, before the worker persists `submitting → confirmed`. Closing requires both signals. With auto-close off, DOM confirmation completes the dispatch directly from `submitting`.
+12. A successful or final failed dispatch removes its session payload, tab index, and any dispatch-local activation or badge-ownership markers. Closing the target tab also removes its state.
 
 A dispatch can be claimed and armed only once. The state transition before submission favors a missed submission over a duplicated submission if execution is interrupted at the boundary.
 
-The source action shows blue `…` during its latest dispatch, then green `✓` for about two seconds. Titles distinguish submitted from prefilled without URL/prompt data. Older dispatch results cannot overwrite newer status. Navigation clears status; timer clearing is best-effort because the service worker may stop.
+The source action shows blue `…` during its latest dispatch, then green `✓` for about two seconds (best-effort timer). Titles distinguish submitted from prefilled without URL/prompt data. The latest invocation owns the status before URL resolution. Clearing a badge on navigation or timeout never restores an older dispatch’s ownership, even when its target is the newer source.
 
 ## Readiness and time bounds
 
 Readiness uses `MutationObserver` on `[data-app-shell-active-page="true"] main` (the document until that active main exists), rebinding whenever the active root changes, even if React retains the previous main in the DOM. It observes child/text changes and `disabled`, `aria-disabled`, `contenteditable`, `aria-label`, `type`, and `data-markdown-text-style`, including in-place Send-to-Stop changes. Bounded 250 ms polling covers URL-only changes and missed events; no fixed page-load sleep is used. Success, timeout, and reader failure all release observers and timers.
 
-A pending or claimed dispatch expires approximately 15 seconds after creation. Arming an auto-close dispatch extends its expiry to approximately 120 seconds from that transition; other armed dispatches retain the original expiry. Expiration is checked on every dispatch message, at service-worker startup, and opportunistically before a new dispatch. Service-worker timers provide prompt cleanup while the worker remains active; correctness does not depend on exact timer delivery.
+A pending or claimed dispatch expires approximately 15 seconds after creation. Arming an auto-close dispatch extends its expiry to approximately 120 seconds from that transition; other armed dispatches retain the original expiry. On startup the worker reconciles session indexes and markers with live payloads, consumes expired records, and restores timers for the remaining leases. Each dispatch message and the sweep before a new dispatch also check expiry. Timers provide prompt cleanup while the worker remains active; correctness does not depend on exact timer delivery.
 
 Current bounded phases are:
 
@@ -196,13 +199,13 @@ Otherwise leave the tab open at timeout. Latch non-empty response detection per 
 
 ## Prompt insertion
 
-The deep link is given an opportunity to prefill the composer first.
+Until Send, the marked target must stay hidden on `/`. Track visibility and Navigation API entry changes from before claim; a visit or unexpected pathname permanently cancels automation, even if reversed between checks. Wait read-only through partial or unreadable prefills. Only an exactly empty composer needs `check-insertion`: the worker verifies the claim, binding and activation without changing state or extending the lease. After the reply, accept a newly exact prefill without writing. For any write, recheck the same empty composer, route, visibility and deadline, including after focus or selection changes that can restore a draft.
 
 If fallback insertion is required:
 
 - A textarea uses the native `HTMLTextAreaElement.prototype.value` setter and an `input` event.
-- A contenteditable composer uses selection plus `document.execCommand("insertText")`.
-- If that does not produce the expected value, the composer receives a paragraph node populated through the native `innerText` setter (which represents line breaks as `br` nodes), followed by an `input` event. Prompt text is never interpreted as HTML.
+- For single-line contenteditable input, select the verified empty composer contents and use `document.execCommand("insertText")`. If it remains focused and exactly empty, the paragraph fallback is allowed. Never replace a partial, different, or unreadable native result; observe it read-only until verification times out.
+- For multiline input, prepare the paragraph directly: native multiline insertion can produce unreadable block markup that cannot safely be replaced. Populate a detached paragraph through `innerText` (line breaks become `br` nodes), recheck the empty focused composer and lease, then replace its contents and dispatch `input`. Prompt text is never interpreted as HTML.
 
 The composer is read back after insertion. Submission is forbidden unless its normalized text exactly equals the expected prompt. Comparison normalizes non-breaking spaces, CRLF line endings, and surrounding whitespace only; internal line breaks and blank lines must match. Collapsed or missing paragraphs do not qualify.
 
@@ -216,13 +219,13 @@ Immediately before submission, the content script rechecks that:
 4. The Send button and scoped model selector are enabled.
 5. The dispatch was successfully armed by the service worker.
 
-After the asynchronous arming reply, the script reacquires the composer, enabled model selector, and enabled Send control and verifies the exact prompt again. A change at that boundary fails closed without submitting, retrying, or arming a second time.
+After the asynchronous arming reply, the script reacquires the composer, enabled model selector, and enabled Send control and verifies the exact prompt again. The arm reply must carry the matching submitting lease. Check its deadline immediately before clicking and bound the two-second submission confirmation by the same deadline. A change at that boundary fails closed without submitting, retrying, or arming a second time.
 
 Invoke the verified Send control once with `button.click()` to preserve button-specific frontend logic and the form submit event. No `form.requestSubmit()`, direct-form fallback, click retry, or synthetic keyboard event.
 
 Submission is confirmed when the composer remains observable and either no longer contains the expected prompt or its Send button becomes disabled. A temporarily missing composer is treated as uncertainty and does not confirm submission. Unreadable composer content is not evidence that the expected prompt was cleared; in that case only an observable disabled Send button can confirm submission.
 
-With `autoClose` enabled, record the non-empty assistant-turn count before submission and follow the [response-signal policy](#assistant-response). On success, ask the service worker to close the target using `chrome.tabs.remove`; on timeout, leave it open. Skip response scans on the Stop fast path, while a temporary-path response is streaming, and entirely when auto-close is disabled.
+For auto-close, count non-empty assistant turns before Send and follow the [response-signal policy](#assistant-response). After Send, the hidden home route may advance to a temporary or canonical conversation, and temporary to canonical. Once confirmed, send the exact evidence pathname (never query or response text) only if route, ownership and lease still match. The worker checks that path against both the sender and a fresh `chrome.tabs.get`. Activation, navigation or reload invalidates the request. Remove only an inactive, fully loaded tab within its lease; Chrome’s check and removal are not atomic. Leave the tab open on uncertainty or timeout. Skip response scans on the Stop fast path, during temporary-path streaming, and whenever auto-close is off.
 
 ## Failure behavior
 
@@ -232,14 +235,14 @@ On final failure:
 
 - Keep the ChatGPT tab open.
 - Log a clear local console error.
-- Show a red `!` badge on the target tab and on the source tab when that dispatch still owns the source's latest status.
+- Show a red `!` badge on the target and on the source if the dispatch still owns its status. If the target has since become the source of a newer dispatch, preserve its newer badge and title.
 - Set a concise per-tab extension-action title describing the failure category without including a URL, prompt, or underlying error detail.
 - Remove consumed dispatch state.
 - Do not retry submission.
 
 Handle restricted-page shortcut injection, logged-out sessions, interstitials/challenges, missing composer, failed injection, missing/disabled Send, changed selectors, and closely timed dispatches.
 
-A missing response-start marker or unverified auto-close condition after a confirmed submission is nonfatal: the extension logs a console error, consumes the completed dispatch, and leaves the tab open. It does not show a failure badge for a message that was already submitted.
+A missing response-start marker or unverified auto-close condition after a confirmed submission is nonfatal: the extension logs a console error, consumes the completed dispatch, and leaves the tab open. Once `confirmed` is persisted, even worker expiry or a late failure consumes the dispatch as submitted without a failure badge or automatic close.
 
 ## Security and privacy
 
@@ -271,6 +274,7 @@ Run the cases relevant to a change and report which cases were verified in the c
 - In Options, change and save every setting, make unsaved edits, then choose **Reset to defaults**. Confirm all fields return to current defaults, automatic closing is enabled, and reopening retains defaults without a separate Save. Repeat reset and confirm unrelated local data and active dispatches remain intact.
 - In a fresh extension profile, confirm Options displays the default Prompt. Clear it, save, reopen Options, and confirm it stays empty and sharing sends only the URL. Existing custom prompts must also remain unchanged after reload.
 - Save Prompt text with multiple paragraphs, blank lines, and single line breaks; verify they survive both prepend and append, deep-link prefill, and fallback insertion. In the current contenteditable editor, verify direct paragraphs, empty-paragraph placeholders, and inline URL labels/icons compare as logical text, without accepting mismatched link targets, missing blank lines, or collapsed text. Repeat with automatic submission disabled, then enabled, verifying one correctly formatted message and no collapsed paragraphs. If exact formatting cannot be verified, confirm the tab stays open without submission.
+- Open the target during preparation: an existing draft must survive and the extension must not submit. Open it or switch conversations after confirmation: the submitted target must remain open even if hidden again. Repeat without taking over to verify normal closing still works.
 - Trigger two dispatches close together and verify each target tab submits its own prompt once.
 - Log out of ChatGPT or block the composer, dispatch again, and confirm no prompt is submitted, the tab remains open, and a red `!` badge or error appears.
 - Open an unrelated ChatGPT tab and confirm it does not auto-submit anything.

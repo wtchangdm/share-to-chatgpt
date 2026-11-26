@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
+  createOptionsActions,
   loadOptions,
   resetOptions,
   saveOptions,
@@ -128,9 +129,83 @@ test("failed reset retains fields and saved settings, and can recover", async ()
   assert.equal(fields.autoClose.disabled, false);
 });
 
-test("reset is an explicitly labeled non-submit button", () => {
-  assert.match(readFileSync("options.html", "utf8"),
-    /<button\s+id="reset-settings"\s+type="button">Reset to defaults<\/button>/);
+test("options markup blocks edits and writes before the first storage read", () => {
+  const html = readFileSync("options.html", "utf8");
+  for (const id of ["optional-text", "placement", "strip-tracking-parameters", "auto-submit", "auto-close"]) {
+    assert.match(html, new RegExp(`<[^>]+id="${id}"[^>]+\\bdisabled\\b`));
+  }
+  assert.match(html, /<button[^>]+type="submit"[^>]+disabled[^>]*>Save<\/button>/);
+  assert.match(html, /<button id="reset-settings" type="button" disabled>Reset to defaults<\/button>/);
+  assert.match(html, /<button id="retry-load" type="button" hidden>Retry loading settings<\/button>/);
+});
+
+test("pending and failed reads block ordinary saves; Retry loads the saved preferences", async () => {
+  const fields = optionsFields();
+  const reads: { resolve(value: Record<string, unknown>): void; reject(error: Error): void }[] = [];
+  const writes: Record<string, unknown>[] = [];
+  let access = "";
+  const actions = createOptionsActions(fields, {
+    get: () => new Promise((resolve, reject) => { reads.push({ resolve, reject }); }),
+    async set(items) { writes.push(items); }
+  }, () => 0, (state) => { access = state; }, () => {});
+
+  const loading = actions.load();
+  assert.equal(access, "busy");
+  await actions.save();
+  await actions.reset();
+  reads[0]!.reject(new Error("Storage unavailable"));
+  await loading;
+  assert.equal(access, "unavailable");
+  assert.equal(fields.status.textContent, "Could not load settings.");
+  await actions.save();
+
+  const retrying = actions.load();
+  assert.equal(access, "busy");
+  await actions.load();
+  await actions.reset();
+  await actions.save();
+  assert.equal(reads.length, 2);
+  reads[1]!.resolve({ settings: { optionalText: "Saved prompt", autoSubmit: false, autoClose: true } });
+  await retrying;
+  assert.equal(access, "ready");
+  assert.equal(fields.status.textContent, "");
+  assert.equal(fields.optionalText.value, "Saved prompt");
+  assert.equal(fields.autoClose.disabled, true);
+  assert.deepEqual(writes, []);
+  fields.optionalText.value = "New prompt";
+  await actions.save();
+  assert.deepEqual(writes, [{ settings: { ...DEFAULT_SETTINGS, optionalText: "New prompt", autoSubmit: false } }]);
+});
+
+test("after a failed read, only a successful explicit reset makes defaults editable", async () => {
+  const fields = optionsFields();
+  const writes: Record<string, unknown>[] = [];
+  let reads = 0;
+  let access = "";
+  let failReset = true;
+  const actions = createOptionsActions(fields, {
+    async get() { reads++; throw new Error("Storage unavailable"); },
+    async set(items) {
+      if (failReset) throw new Error("Reset unavailable");
+      writes.push(items);
+    }
+  }, () => 0, (state) => { access = state; }, () => {});
+  await actions.load();
+  await actions.reset();
+  assert.equal(access, "unavailable");
+  assert.equal(fields.status.textContent, "Could not reset settings.");
+  await actions.save();
+  assert.deepEqual(writes, []);
+  failReset = false;
+  const resetting = actions.reset();
+  assert.equal(access, "busy");
+  await actions.load();
+  await resetting;
+  assert.equal(reads, 1);
+  assert.equal(access, "ready");
+  assert.equal(fields.optionalText.value, DEFAULT_SETTINGS.optionalText);
+  assert.equal(fields.status.textContent, "Defaults restored.");
+  assert.deepEqual(writes, [{ settings: DEFAULT_SETTINGS }]);
 });
 
 test("placement defaults after the link without writes and preserves saved choices", async () => {

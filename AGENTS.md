@@ -55,6 +55,8 @@ URL cleanup, prompt construction, dispatch hot paths, DOM observation/polling, a
 | `benchmark:composer-reading` | Multiline textarea/contenteditable reads; requires `agent-browser` and Chromium |
 | `benchmark:auto-close-observation` | Assistant/composer selectors and scoped Send/Stop observation |
 | `benchmark:dispatch-policy` | Claim/arm transitions with a bound target tab |
+| `benchmark:shortcut` | Shortcut invocation to bound navigation; mocked Chrome calls and full session reads |
+| `benchmark:submission` | Submit-only and confirmed auto-close request in a hidden Chromium fixture with mocked worker replies; requires `agent-browser` and Chromium |
 
 ## Validation
 
@@ -62,7 +64,7 @@ Use focused tests during TDD; finish every code change with `npm run check` (Typ
 
 For Chrome/ChatGPT runtime changes, run applicable [manual regressions](spec.md#manual-regression-checklist). Report automated and manual results separately, with exact reasons for skipped checks.
 
-Composer insertion changes also require `npm run test:composer-browser` with installed `agent-browser` and Chromium. It runs `tests/browser/composer.ts` in isolation (native insertion, forced fallback, repeated use, reset), not a signed-in profile or substitute for live ChatGPT checks.
+Composer insertion changes also require `npm run test:composer-browser` with installed `agent-browser` and Chromium. It runs `tests/browser/composer.ts` in isolation (native insertion, forced fallback, repeated use, reset, active-page selection, and takeover during arming), not a signed-in profile or substitute for live ChatGPT checks.
 
 ## Chrome Web Store release preparation
 
