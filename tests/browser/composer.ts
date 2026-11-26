@@ -460,10 +460,10 @@ export async function checkSubmissionTakeover(): Promise<{ checks: number }> {
     }
     // Both same-document changes happen before the arm reply resolves.
     verifyFailure(await run({ onArm: leaveAndReturn }), 1);
-    verifyFailure(await run({ onArm: async () => {
+    verifySubmission(await run({ onArm: async () => {
       foreground.close();
       await waitForVisibility(false);
-    } }), 1);
+    } }));
     return { checks: 5 };
   });
 }
@@ -471,7 +471,7 @@ export async function checkSubmissionTakeover(): Promise<{ checks: number }> {
 function verifySubmission(result: SubmissionResult, autoClose = false): void {
   if (result.arms !== 1 || result.submissions !== 1 || result.confirmations !== Number(autoClose) ||
     result.completions !== 1 || result.failures !== 0) {
-    throw new Error("The background submission did not complete exactly once: " + JSON.stringify(result));
+    throw new Error("Submission did not complete exactly once: " + JSON.stringify(result));
   }
 }
 

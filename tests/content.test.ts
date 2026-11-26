@@ -490,8 +490,8 @@ for (const draft of ["different", " ", "unreadable", "expired", "empty"]) {
   });
 }
 
-for (const change of ["worker activation", "missing state", "port error", "missing reply", "no reply", "expired claim",
-  "local takeover", "route change", "draft", "unreadable", "replaced", "exact", "replacement exact"]) {
+for (const change of ["missing state", "port error", "missing reply", "no reply", "expired claim",
+  "route change", "draft", "unreadable", "replaced", "exact", "replacement exact"]) {
   test(`fallback insertion authorization: ${change}`, async (t) => {
     const exact = change === "exact" || change === "replacement exact";
     let original: FakeTextarea | undefined;
@@ -500,7 +500,7 @@ for (const change of ["worker activation", "missing state", "port error", "missi
       setup(dom) { original = dom.textarea; original.value = ""; },
       onMessage(type, dom, dispatch) {
         if (type !== "check-insertion") return;
-        if (change === "worker activation" || change === "missing state") return { ok: false, error: change };
+        if (change === "missing state") return { ok: false, error: change };
         if (change === "port error") throw new Error("Message port closed");
         if (change === "missing reply") return Promise.resolve(undefined as unknown as DispatchResponse);
         if (change === "no reply") {
@@ -508,7 +508,6 @@ for (const change of ["worker activation", "missing state", "port error", "missi
           return new Promise<DispatchResponse>(() => {});
         }
         if (change === "expired claim") t.mock.method(Date, "now", () => dispatch.expiresAt);
-        if (change === "local takeover") dom.visitAndLeave();
         if (change === "route change") dom.setPathname(local);
         if (change === "draft") dom.textarea.value = "User draft";
         if (change === "unreadable") dom.useUnreadableComposer();
@@ -570,12 +569,15 @@ test("a marked existing conversation cannot receive fallback insertion", async (
   assertDispatch(claimFailed, 0);
 });
 
-test("a visible marked tab never authorizes automation", async () => {
-  const { assertDispatch } = await scenario({ settings: { autoClose: false }, setup(dom) { dom.setVisible(true); } });
-  assertDispatch(claimFailed, 0);
+test("a visible marked tab submits the verified prompt and requests a verified close", async () => {
+  const { assertDispatch } = await scenario({
+    setup(dom) { dom.setVisible(true); },
+    onSubmit(dom) { dom.setPathname(canonical); dom.form.stopButtonAvailable = true; }
+  });
+  assertDispatch(confirmed, 1, [true]);
 });
 
-test("a visit during claim permanently blocks fallback even after returning to background", async () => {
+test("a visit during claim does not block fallback insertion", async () => {
   const { dom, assertDispatch } = await scenario({
     settings: { autoClose: false },
     setup(dom) { dom.textarea.value = ""; },
@@ -583,11 +585,11 @@ test("a visit during claim permanently blocks fallback even after returning to b
       if (type === "claim-dispatch") dom.visitAndLeave();
     }
   });
-  assert.equal(dom.textarea.inputEvents.length, 0);
-  assertDispatch(claimFailed, 0);
+  assert.equal(dom.textarea.inputEvents.length, 1);
+  assertDispatch(["claim-dispatch", "check-insertion", "arm-dispatch", "complete-dispatch"], 1);
 });
 
-for (const change of ["prompt", "send-button", "model-button", "takeover", "canonical", "away and back", "missing lease", "expired lease"]) {
+for (const change of ["prompt", "send-button", "model-button", "canonical", "away and back", "missing lease", "expired lease"]) {
   test(`arming cannot submit after ${change}`, async () => {
     const { assertDispatch } = await scenario({
       settings: { autoClose: false },
@@ -596,7 +598,6 @@ for (const change of ["prompt", "send-button", "model-button", "takeover", "cano
         if (change === "prompt") dom.textarea.value = "Changed during arming";
         if (change === "send-button") dom.button.disabled = true;
         if (change === "model-button") dom.form.modelButton.disabled = true;
-        if (change === "takeover") dom.visitAndLeave();
         if (change === "canonical") dom.setPathname(canonical);
         if (change === "away and back") { dom.setPathname(local); dom.setPathname("/"); }
         if (change === "missing lease") return { ok: true };
@@ -640,14 +641,13 @@ test("an unrelated route cannot supply submission confirmation", async () => {
   assertDispatch(armFailed, 1);
 });
 
-for (const change of ["visible then hidden", "other canonical", "back to home", "unrelated then canonical", "different local"]) {
+for (const change of ["other canonical", "back to home", "unrelated then canonical", "different local"]) {
   test(`confirmed submission leaves the tab open on ${change}`, async () => {
     const { assertDispatch } = await scenario({
       settings: { expiresAt: Date.now() + 800 },
       onSubmit(dom) { dom.setPathname(change === "different local" ? local : canonical); },
       onMessage(type, dom) {
         if (type !== "confirm-dispatch") return;
-        if (change === "visible then hidden") dom.visitAndLeave();
         if (change === "other canonical") dom.setPathname(canonical.replace("6a76", "aaaa"));
         if (change === "back to home") dom.setPathname("/");
         if (change === "unrelated then canonical") { dom.setPathname("/settings"); dom.setPathname(canonical); }
@@ -659,7 +659,7 @@ for (const change of ["visible then hidden", "other canonical", "back to home", 
   });
 }
 
-test("a visit between response polls disqualifies a later canonical Stop", async () => {
+test("a visit between response polls does not disqualify a later canonical Stop", async () => {
   const { assertDispatch } = await scenario({
     settings: { expiresAt: Date.now() + 800 },
     onSubmit(dom) { dom.setPathname(local); },
@@ -672,7 +672,7 @@ test("a visit between response polls disqualifies a later canonical Stop", async
       }, 10);
     }
   });
-  assertDispatch(confirmed, 1, [false]);
+  assertDispatch(confirmed, 1, [true]);
 });
 
 for (const sample of [
@@ -711,7 +711,7 @@ test("Stop present at DOM confirmation qualifies before a microtask finishes the
   assertDispatch(confirmed, 1, [true]);
 });
 
-for (const ack of ["ok", "reject", "error", "takeover", "path advanced", "expired", "late ACK", "DOM error"]) {
+for (const ack of ["ok", "reject", "error", "visit", "path advanced", "expired", "late ACK", "DOM error"]) {
   test(`temporary-path completion during deferred confirmation: ${ack}`, async (t) => {
     let acknowledged = false;
     const { assertDispatch } = await scenario({
@@ -735,7 +735,7 @@ for (const ack of ["ok", "reject", "error", "takeover", "path advanced", "expire
             dom.mutate();
             dom.finishResponse("Test");
             dom.assistantMessages.length = 0;
-            if (ack === "takeover") dom.visitAndLeave();
+            if (ack === "visit") dom.visitAndLeave();
             // Ownership permits local → canonical, but the local completion cannot authorize that new route.
             if (ack === "path advanced") dom.setPathname(canonical);
             if (ack === "expired") return; // No reply; the lease must bound the wait.
@@ -749,7 +749,7 @@ for (const ack of ["ok", "reject", "error", "takeover", "path advanced", "expire
     if (["reject", "error", "expired"].includes(ack)) {
       assertDispatch(["claim-dispatch", "arm-dispatch", "confirm-dispatch", "fail-dispatch"], 1, []);
     } else {
-      assertDispatch(confirmed, 1, [ack === "ok"]);
+      assertDispatch(confirmed, 1, [ack === "ok" || ack === "visit"]);
     }
   });
 }

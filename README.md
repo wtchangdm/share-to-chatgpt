@@ -23,7 +23,7 @@ Reload the extension after rebuilding.
 - **Link context menu → Send link to ChatGPT:** share that link.
 - **Command+B** (macOS) / **Ctrl+B** (other platforms): share the hovered link, or the current page if none is hovered. Customize at `chrome://extensions/shortcuts`.
 
-The source tab stays active. Opening the ChatGPT tab stops any pending send or automatic close. The extension won’t replace a different draft. The source badge shows blue `…` while sharing, brief green `✓` on completion, or red `!` on failure. Hover for the failure category; navigation clears the badge.
+The ChatGPT tab opens in the background. Switching to it does not pause sharing: if automatic closing is on, the tab can close while you are viewing it. The extension won’t replace a different draft. The source badge shows blue `…` while sharing, brief green `✓` on completion, or red `!` on failure. Hover for the failure category; navigation clears the badge.
 
 ### Options
 

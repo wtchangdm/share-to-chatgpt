@@ -5,8 +5,8 @@ const FAILURE_TITLE = "Share to ChatGPT failed; see the extension console";
 export function getFailureActionTitle(error: string): string {
   const normalized = error.toLowerCase();
 
-  if (normalized.includes("target tab was activated") || normalized.includes("expected conversation route changed")) {
-    return "Share to ChatGPT: stopped because the target tab was opened or changed";
+  if (normalized.includes("expected conversation route changed")) {
+    return "Share to ChatGPT: could not verify the conversation route";
   }
   if (normalized.includes("cannot access") || normalized.includes("shortcut target")) {
     return "Share to ChatGPT: shortcut unavailable on this page";

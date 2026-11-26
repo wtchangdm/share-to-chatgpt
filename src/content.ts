@@ -186,8 +186,8 @@ export function insertPrompt(composer: ComposerElement, prompt: string, requireT
   }));
 }
 
-// Observe from before claim until completion. Polling alone can miss a visit
-// to the tab or a same-document route change that is reversed between checks.
+// Observe from before claim until completion so a route change reversed
+// between checks still invalidates the dispatch.
 class DispatchTarget {
   private owned = true;
   private clicked = false;
@@ -196,7 +196,6 @@ class DispatchTarget {
 
   constructor() {
     this.navigation?.addEventListener("currententrychange", this.check);
-    document.addEventListener("visibilitychange", this.check);
     this.check();
   }
 
@@ -210,14 +209,14 @@ class DispatchTarget {
   readonly check = (): boolean => {
     if (this.owned) {
       const next = location.pathname;
-      this.owned = !!this.navigation && document.visibilityState === "hidden" && this.acceptsPath(next);
+      this.owned = !!this.navigation && this.acceptsPath(next);
       this.path = next;
     }
     return this.owned;
   };
 
   require(deadline: number): void {
-    if (!this.check()) throw new Error("The background target or its expected conversation route changed.");
+    if (!this.check()) throw new Error("The expected conversation route changed or could not be verified.");
     if (!(Date.now() < deadline)) throw new Error("Dispatch expired before the operation was verified.");
   }
 
@@ -225,7 +224,6 @@ class DispatchTarget {
 
   dispose(): void {
     this.navigation?.removeEventListener("currententrychange", this.check);
-    document.removeEventListener("visibilitychange", this.check);
   }
 }
 
@@ -251,8 +249,8 @@ async function preparePrompt(dispatch: DispatchPayload, target: DispatchTarget):
   if (!composer || readComposerText(composer) !== "") {
     throw new Error("No verified empty composer was available for prompt injection.");
   }
-  // A tab activation may be known only to the worker. Its acknowledgement
-  // does not extend the claim or authorize writing to a replacement editor.
+  // The worker verifies the claim without extending it or authorizing a write
+  // to a replacement editor.
   await requireAcknowledgementBy({ type: "check-insertion", dispatchId: dispatch.id }, deadline);
   const current = readComposer();
   if (current !== composer || readComposerText(composer) !== "") {

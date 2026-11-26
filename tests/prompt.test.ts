@@ -468,14 +468,9 @@ test("unreadable composer text is not evidence that the expected prompt was clea
   }
 });
 
-test("the action title distinguishes a target takeover from a navigation failure", () => {
-  for (const detail of [
-    "The target tab was activated; refusing to automate it.",
-    "Could not open ChatGPT: The target tab was activated.",
-    "The background target or its expected conversation route changed."
-  ]) {
-    assert.equal(getFailureActionTitle(detail), "Share to ChatGPT: stopped because the target tab was opened or changed");
-  }
+test("the action title identifies an unverifiable conversation route", () => {
+  assert.equal(getFailureActionTitle("The expected conversation route changed or could not be verified."),
+    "Share to ChatGPT: could not verify the conversation route");
 });
 
 test("failure action titles are useful without exposing dispatch data", () => {

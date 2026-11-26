@@ -121,7 +121,7 @@ No all-sites permission, paid OpenAI API, ChatGPT `/backend-api/` access, or thi
 
 1. The service worker reads the target URL and local settings, then applies enabled tracking-parameter cleanup before constructing the prompt.
 2. It generates a random UUID and stores a `pending` dispatch in `chrome.storage.session` before navigation. The payload retains only the generated prompt, tab IDs, timestamps, transition status, and applicable automation flags; it does not duplicate the target URL or retain the source title.
-3. It creates an inactive `about:blank` tab, writes the target tab index before the bound payload, then navigates to ChatGPT. Messages require both bindings. From creation through the final close decision, even a brief target activation vetoes further insertion, submission, or closing. The worker remembers activation in session storage across restarts; if that write fails it revokes the tab index. Unrelated activations are not persisted.
+3. It creates an inactive `about:blank` tab, writes the target tab index before the bound payload, then navigates to ChatGPT. Messages require both bindings. Switching to or away from the target does not affect insertion, submission, or closing.
 4. Navigate to `https://chatgpt.com/?prompt=<encoded prompt>#share-to-chatgpt-dispatch=<UUID>`.
 5. The content script does nothing in ChatGPT tabs without this marker.
 6. For a marked tab, it removes the hash with `history.replaceState` and claims the matching session payload through extension messaging.
@@ -130,7 +130,7 @@ No all-sites permission, paid OpenAI API, ChatGPT `/backend-api/` access, or thi
 9. If `autoSubmit` is disabled, the dispatch completes in the `claimed` state and the tab remains open.
 10. If `autoSubmit` is enabled, the content script requests the `claimed → submitting` transition before invoking submission. When auto-close is enabled, the successful transition extends the dispatch expiry to approximately 120 seconds so conversation persistence or the response-completion fallback can be verified.
 11. For auto-close, begin observing the response in the DOM read that confirms submission, before the worker persists `submitting → confirmed`. Closing requires both signals. With auto-close off, DOM confirmation completes the dispatch directly from `submitting`.
-12. A successful or final failed dispatch removes its session payload, tab index, and any dispatch-local activation or badge-ownership markers. Closing the target tab also removes its state.
+12. A successful or final failed dispatch removes its session payload, tab index, and any dispatch-local badge-ownership markers. Closing the target tab also removes its state.
 
 A dispatch can be claimed and armed only once. The state transition before submission favors a missed submission over a duplicated submission if execution is interrupted at the boundary.
 
@@ -199,7 +199,7 @@ Otherwise leave the tab open at timeout. Latch non-empty response detection per 
 
 ## Prompt insertion
 
-Until Send, the marked target must stay hidden on `/`. Track visibility and Navigation API entry changes from before claim; a visit or unexpected pathname permanently cancels automation, even if reversed between checks. Wait read-only through partial or unreadable prefills. Only an exactly empty composer needs `check-insertion`: the worker verifies the claim, binding and activation without changing state or extending the lease. After the reply, accept a newly exact prefill without writing. For any write, recheck the same empty composer, route, visibility and deadline, including after focus or selection changes that can restore a draft.
+Until Send, the marked target must stay on `/`. Track Navigation API entry changes from before claim; an unexpected pathname permanently cancels automation, even if reversed between checks. Wait read-only through partial or unreadable prefills. Only an exactly empty composer needs `check-insertion`: the worker verifies the claim and binding without changing state or extending the lease. After the reply, accept a newly exact prefill without writing. For any write, recheck the same empty composer, route and deadline, including after focus or selection changes that can restore a draft.
 
 If fallback insertion is required:
 
@@ -225,7 +225,7 @@ Invoke the verified Send control once with `button.click()` to preserve button-s
 
 Submission is confirmed when the composer remains observable and either no longer contains the expected prompt or its Send button becomes disabled. A temporarily missing composer is treated as uncertainty and does not confirm submission. Unreadable composer content is not evidence that the expected prompt was cleared; in that case only an observable disabled Send button can confirm submission.
 
-For auto-close, count non-empty assistant turns before Send and follow the [response-signal policy](#assistant-response). After Send, the hidden home route may advance to a temporary or canonical conversation, and temporary to canonical. Once confirmed, send the exact evidence pathname (never query or response text) only if route, ownership and lease still match. The worker checks that path against both the sender and a fresh `chrome.tabs.get`. Activation, navigation or reload invalidates the request. Remove only an inactive, fully loaded tab within its lease; Chrome’s check and removal are not atomic. Leave the tab open on uncertainty or timeout. Skip response scans on the Stop fast path, during temporary-path streaming, and whenever auto-close is off.
+For auto-close, count non-empty assistant turns before Send and follow the [response-signal policy](#assistant-response). After Send, the home route may advance to a temporary or canonical conversation, and temporary to canonical. Once confirmed, send the exact evidence pathname (never query or response text) only if route, ownership and lease still match. The worker checks that path against both the sender and a fresh `chrome.tabs.get`. Navigation or reload invalidates the request. Remove only the fully loaded, bound tab within its lease, whether active or inactive; Chrome’s check and removal are not atomic. Leave the tab open on uncertainty or timeout. Skip response scans on the Stop fast path, during temporary-path streaming, and whenever auto-close is off.
 
 ## Failure behavior
 
@@ -274,7 +274,7 @@ Run the cases relevant to a change and report which cases were verified in the c
 - In Options, change and save every setting, make unsaved edits, then choose **Reset to defaults**. Confirm all fields return to current defaults, automatic closing is enabled, and reopening retains defaults without a separate Save. Repeat reset and confirm unrelated local data and active dispatches remain intact.
 - In a fresh extension profile, confirm Options displays the default Prompt. Clear it, save, reopen Options, and confirm it stays empty and sharing sends only the URL. Existing custom prompts must also remain unchanged after reload.
 - Save Prompt text with multiple paragraphs, blank lines, and single line breaks; verify they survive both prepend and append, deep-link prefill, and fallback insertion. In the current contenteditable editor, verify direct paragraphs, empty-paragraph placeholders, and inline URL labels/icons compare as logical text, without accepting mismatched link targets, missing blank lines, or collapsed text. Repeat with automatic submission disabled, then enabled, verifying one correctly formatted message and no collapsed paragraphs. If exact formatting cannot be verified, confirm the tab stays open without submission.
-- Open the target during preparation: an existing draft must survive and the extension must not submit. Open it or switch conversations after confirmation: the submitted target must remain open even if hidden again. Repeat without taking over to verify normal closing still works.
+- Switch to the target during preparation and keep it selected: the exact prompt should submit once and the tab should close if automatic closing is enabled. Repeat with a different draft: it must survive without submission. Switching to another conversation after confirmation must still prevent closing.
 - Trigger two dispatches close together and verify each target tab submits its own prompt once.
 - Log out of ChatGPT or block the composer, dispatch again, and confirm no prompt is submitted, the tab remains open, and a red `!` badge or error appears.
 - Open an unrelated ChatGPT tab and confirm it does not auto-submit anything.

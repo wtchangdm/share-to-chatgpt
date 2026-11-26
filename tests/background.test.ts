@@ -53,8 +53,6 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
   let failWritePrefix: string | undefined;
   const activations = workerEvent<(info: { tabId: number; windowId: number }) => void>();
   const sessionChanges = workerEvent<(changes: Record<string, chrome.storage.StorageChange>) => void>();
-  const visit = (id: number) => { for (const tabId of [id, 9999]) activations.listener?.({ tabId, windowId: 1 }); };
-  let storageCalls = 0;
   const activeTabs = new Set<number>();
   let currentLocation: Pick<chrome.tabs.Tab, "status" | "url" | "pendingUrl"> = {
     status: "complete", url: "https://chatgpt.com/"
@@ -72,7 +70,6 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
     sessionChanges.listener?.({ [`tab-dispatch:${targetTabId}`]: { newValue: id } });
     return dispatch;
   }
-  const waking = seed("worker-waking", 700, "confirmed");
   const visited = seed("persisted-visit", 701, "pending");
   session.set("target-activated:persisted-visit", true);
   const startup = seed("worker-startup-expiry", 100, "confirmed", true);
@@ -97,46 +94,34 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
   type ReadKeys = string | string[] | null | undefined;
   let hooks: {
     beforeRead?: (keys: ReadKeys) => void | Promise<void>;
-    afterRead?: (keys: ReadKeys) => void | Promise<void>;
     beforeWrite?: (items: Record<string, unknown>) => void | Promise<void>;
-    beforeCreate?: () => void;
     beforeRemove?: (keys: string | string[]) => void;
-    afterRemove?: (keys: string | string[]) => void;
     beforeTabGet?: () => void;
-    afterTabGet?: (id: number) => void;
   } = {};
   t.afterEach(() => { hooks = {}; });
-  let releaseOrphanVisit: (() => void) | undefined;
   const storageArea = {
     onChanged: sessionChanges,
     async get(keys?: string | string[] | null): Promise<Record<string, unknown>> {
       const wait = hooks.beforeRead?.(keys);
       if (wait) await wait;
-      storageCalls++;
       if (keys === null || keys === undefined) {
-        if (++scans === 1) visit(700); // Wake-up before the recovery snapshot resolves.
+        scans++;
         const snapshot = structuredClone(Object.fromEntries(session));
         if (scans === 1) {
           seed("concurrent-bind", 854, "claimed");
           seed("replacement", 855, "pending");
           sessionChanges.listener?.({ "tab-dispatch:853": { newValue: "missing-payload" } });
-          visit(853);
         }
         return snapshot;
       }
       const requestedKeys = typeof keys === "string" ? [keys] : keys;
-      const snapshot = Object.fromEntries(requestedKeys.flatMap((key) =>
+      return Object.fromEntries(requestedKeys.flatMap((key) =>
         session.has(key) ? [[key, structuredClone(session.get(key))]] : []
       ));
-      const reply = hooks.afterRead?.(keys);
-      if (reply) await reply;
-      return snapshot;
     },
     async set(items: Record<string, unknown>): Promise<void> {
       const wait = hooks.beforeWrite?.(items);
       if (wait) await wait;
-      storageCalls++;
-      if ("target-activated:missing-payload" in items) await new Promise<void>(done => { releaseOrphanVisit = done; });
       const prefix = failWritePrefix;
       if (prefix && Object.keys(items).some(key => key.startsWith(prefix))) {
         failWritePrefix = undefined;
@@ -151,7 +136,6 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
     },
     async remove(keys: string | string[]): Promise<void> {
       hooks.beforeRemove?.(keys);
-      storageCalls++;
       const changes: Record<string, chrome.storage.StorageChange> = {};
       for (const key of typeof keys === "string" ? [keys] : keys) {
         if (session.has(key)) changes[key] = { oldValue: session.get(key) };
@@ -159,7 +143,6 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
         session.delete(key);
       }
       sessionChanges.listener?.(changes);
-      if (hooks.afterRemove) { await Promise.resolve(); hooks.afterRemove(keys); }
     }
   };
 
@@ -189,7 +172,6 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
     },
     tabs: {
       async create(properties: chrome.tabs.CreateProperties): Promise<chrome.tabs.Tab> {
-        hooks.beforeCreate?.();
         createdTabs.push(properties);
         return { id: nextTabId++ } as chrome.tabs.Tab;
       },
@@ -209,9 +191,7 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
       async get(tabId: number): Promise<chrome.tabs.Tab> {
         hooks.beforeTabGet?.();
         await Promise.resolve(); // Navigation can change the tab before Chrome replies.
-        const tab = { id: tabId, active: activeTabs.has(tabId), ...currentLocation } as chrome.tabs.Tab;
-        if (hooks.afterTabGet) { await Promise.resolve(); hooks.afterTabGet(tabId); }
-        return tab;
+        return { id: tabId, active: activeTabs.has(tabId), ...currentLocation } as chrome.tabs.Tab;
       },
       async remove(tabId: number): Promise<void> { closedTabs.push(tabId); },
       onActivated: activations,
@@ -285,11 +265,10 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
     };
     return () => attempts;
   }
-  function pauseWrite(key: string, rejectPrefix?: string) {
+  function pauseWrite(key: string) {
     const blocked = gate();
     let entered = false;
     hooks.beforeWrite = items => {
-      if (rejectPrefix && Object.keys(items).some(k => k.startsWith(rejectPrefix))) throw new Error("Session write failed.");
       if (key in items) { entered = true; return blocked.wait; }
     };
     return {
@@ -316,13 +295,6 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
     assert.equal(badge(d.sourceTabId!), "✓");
     return closedTabs.includes(d.targetTabId!);
   }
-  async function assertNoStorage(work: () => void, message?: string) {
-    const before = storageCalls;
-    work();
-    await tick();
-    assert.equal(storageCalls, before, message);
-  }
-  const unrelatedVisits = () => { for (let id = 9100; id < 9120; id++) visit(id); };
   const dropPayloads = (...ids: string[]) => { for (const id of ids) session.delete(`dispatch:${id}`); };
   const assertAbsent = (...keys: string[]) => { for (const key of keys) assert.equal(session.has(key), false, key); };
   async function restartTimers() {
@@ -367,9 +339,6 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
     await t.test("startup reconciles orphan metadata without breaking valid or concurrently completed bindings", async (st) => {
       st.after(() => dropPayloads(bad.id, reassigned.id, newOwner.id, "concurrent-bind", "replacement"));
       await tick();
-      assert.ok(releaseOrphanVisit);
-      releaseOrphanVisit();
-      await tick();
       assertAbsent(`dispatch:${bad.id}`, `dispatch:${reassigned.id}`, "tab-dispatch:852", "tab-dispatch:853",
         "target-activated:missing-payload", "target-activated:no-index-or-payload");
       assert.equal(session.get("tab-dispatch:856"), newOwner.id);
@@ -377,7 +346,6 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
       assert.equal(session.get("tab-dispatch:855"), "replacement");
       assert.equal(session.get("tab-dispatch:850"), recovered.id);
       assert.equal(session.has("unrelated:missing-payload"), true);
-      await assertNoStorage(() => visit(853), "the orphan watch must not survive");
     });
     await t.test("startup re-arms live confirmed and unbound pending deadlines", async (st) => {
       st.after(() => dropPayloads(recovered.id, unbound.id));
@@ -398,13 +366,14 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
       assert.equal(session.has(`dispatch:${valid.id}`), true);
       assert.equal(session.get("tab-dispatch:880"), valid.id);
     });
-    await t.test("a prior worker's persisted activation prevents a fresh claim", async () => {
-      assert.equal((await transition(visited, "claim-dispatch")).ok, false);
-      assert.equal(session.has("dispatch:persisted-visit"), false);
+    await t.test("an active target can advance despite a prior worker's legacy activation marker", async () => {
+      for (const type of ["claim-dispatch", "check-insertion", "arm-dispatch", "confirm-dispatch"] as const) {
+        assert.equal((await send({ type, dispatchId: visited.id }, 701, undefined, true)).ok, true, type);
+      }
+      assert.deepEqual(await complete(visited, false), { ok: true });
+      assertAbsent("dispatch:persisted-visit", "target-activated:persisted-visit");
     });
-    await t.test("activation that wakes a restarted worker blocks deferred close", async () => {
-      assert.equal(await closeResult(waking, "/"), false);
-    });
+    assert.equal(activations.listener, undefined, "tab switches must not be tracked");
     actionClickListener({
       id: 10,
       url: "https://example.com/article?utm_source=newsletter&item=42#details"
@@ -746,7 +715,7 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
       assert.equal(badge(203), undefined);
       assert.equal(scheduledTimers.some(item => item.delay === 0), false);
     });
-    await t.test("only confirmed auto-close dispatches may close a still-inactive target", async () => {
+    await t.test("eligible confirmed dispatches close both inactive and active targets", async () => {
       for (const [target, autoSubmit, autoClose, status] of [
         [204, false, true, "claimed"], [205, true, false, "submitting"],
         [206, true, true, "confirmed"], [207, true, true, "confirmed"],
@@ -765,7 +734,7 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
         assert.equal(session.has(`dispatch:${d.id}`), false);
         assert.equal(title(target + 1000), autoSubmit ? "Share to ChatGPT: prompt submitted" : "Share to ChatGPT: prompt ready in ChatGPT");
       }
-      assert.deepEqual(closedTabs, [206]);
+      assert.deepEqual(closedTabs, [206, 207]);
     });
     await t.test("fallback permission requires an unexpired claimed binding and does not advance it", async () => {
       const d = seed("insertion", 860, "claimed");
@@ -781,132 +750,24 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
       assert.equal((await send(check, 860)).ok, false);
       assert.equal(session.has(`dispatch:${d.id}`), false);
     });
-    for (const type of ["check-insertion", "complete-dispatch"] as const) {
-      await t.test(`${type} refuses prefill on a visited target even if content missed activation`, async () => {
-        for (const signal of ["stored", "active", "visit"]) {
-          const d = seed(`visit-${type}-${signal}`, 861, "claimed");
-          d.autoSubmit = false;
-          if (signal === "stored") session.set(`target-activated:${d.id}`, true);
-          if (signal === "visit") visit(861);
-          assert.equal((await send({ type, dispatchId: d.id, closeTab: false }, 861, undefined, signal === "active")).ok, false);
-          assert.equal(badge(d.sourceTabId!), "!");
-          assert.equal(session.has(`dispatch:${d.id}`), false);
-        }
-      });
-    }
-    for (const phase of ["creation", "binding", "before-claim", "claim-write", "arm-write"] as const) {
-      await t.test(`a visit during ${phase} never authorizes insertion or Send`, async (st) => {
-        const tabId = nextTabId;
-        const create = st.mock.fn(() => { if (phase === "creation") visit(tabId); });
-        hooks.beforeCreate = create;
-        hooks.beforeWrite = items => {
-          const payload = Object.entries(items).find(([key]) => key.startsWith("dispatch:"))?.[1] as DispatchPayload | undefined;
-          if ((phase === "binding" && `tab-dispatch:${tabId}` in items) ||
-              (phase === "claim-write" && payload?.status === "claimed") ||
-              (phase === "arm-write" && payload?.status === "submitting")) visit(tabId);
-        };
-        localSettings = { autoSubmit: true };
-        sharePage(69, "visit");
-        await tick();
-        assert.equal(create.mock.callCount(), 1);
-        const d = dispatchEntries(session).find(record => record.targetTabId === tabId);
-        if (d) {
-          if (phase === "before-claim") visit(tabId);
-          const claim = await transition(d, "claim-dispatch");
-          if (phase === "arm-write") {
-            assert.equal(claim.ok, true);
-            assert.equal((await transition(d, "arm-dispatch")).ok, false);
-          } else assert.equal(claim.ok, false);
-        }
-        assert.equal(badge(69), "!");
-        assert.equal(session.has(`tab-dispatch:${tabId}`), false);
-        assert.equal(dispatchEntries(session).some(record => record.targetTabId === tabId), false);
-      });
-    }
-    await t.test("ordinary unrelated activation during creation does not suppress an untouched target", async () => {
-      hooks.beforeCreate = () => visit(8000);
-      sharePage(70, "untouched");
-      const d = await navigationFrom(70);
-      assert.equal((await transition(d, "claim-dispatch")).ok, true);
+    await t.test("an active target can finish without submission when auto-submit is disabled", async () => {
+      const d = seed("active-prefill", 861, "claimed");
+      d.autoSubmit = false;
+      const complete = { type: "complete-dispatch", dispatchId: d.id, closeTab: false } as const;
+      assert.deepEqual(await send(complete, 861, undefined, true), { ok: true });
+      assertAbsent(`dispatch:${d.id}`, "tab-dispatch:861");
+      assert.equal(closedTabs.includes(861), false);
     });
-    await t.test("a restart cannot lose a visit behind an in-flight confirmation write", async () => {
-      const d = seed("blocked-confirm", 709, "submitting");
-      const blocked = pauseWrite(`dispatch:${d.id}`);
-      const confirmed = transition(d, "confirm-dispatch");
-      await blocked.waitUntilBlocked();
-      visit(709);
-      // Snapshot available to a fresh worker, before the old dispatch queue can advance.
-      const durableVisit = session.get(`target-activated:${d.id}`);
-      blocked.release();
-      assert.deepEqual(await confirmed, { ok: true });
-      assert.equal(durableVisit, true);
-      assert.deepEqual(await complete(d, true, "/"), { ok: true });
-      assert.equal(session.has(`target-activated:${d.id}`), false);
-    });
-    await t.test("a failed veto write behind confirmation revokes first and reports the final confirmed status", async () => {
-      const d = seed("failed-veto-confirm-write", 719, "submitting");
-      const blocked = pauseWrite(`dispatch:${d.id}`);
-      const confirmed = transition(d, "confirm-dispatch");
-      await blocked.waitUntilBlocked();
-      failWritePrefix = "target-activated:";
-      visit(719);
-      await tick();
-      const stillBound = session.has("tab-dispatch:719");
-      blocked.release();
-      assert.equal((await confirmed).ok, true);
-      assert.equal(stillBound, false);
-      await waitUntil(() => !session.has(`dispatch:${d.id}`) && badge(d.sourceTabId!) === "✓");
-      assert.equal(badgeUpdates.some(update => [719, d.sourceTabId].includes(update.tabId) && update.text === "!"), false);
-    });
-    await t.test("activation during failed consumption also revokes when its marker write fails", async () => {
-      const d = seed("failed-consumption-veto", 718, "confirmed");
-      let failRemoval = true;
+    await t.test("a failed cleanup cannot authorize deferred removal", async () => {
+      const d = seed("failed-cleanup", 718, "confirmed");
       hooks.beforeRemove = keys => {
-        if (failRemoval && keys.includes(`dispatch:${d.id}`)) {
-          failRemoval = false;
-          visit(718);
-          throw new Error("Dispatch cleanup failed.");
-        }
+        if (keys.includes(`dispatch:${d.id}`)) throw new Error("Dispatch cleanup failed.");
       };
-      failWritePrefix = "target-activated:";
-      const result = await complete(d, true, "/");
-      assert.equal(result.ok, false);
-      await tick();
-      assertAbsent("tab-dispatch:718", `dispatch:${d.id}`);
-      assert.equal(badge(d.sourceTabId!), "✓");
+      const flush = deferredCloses();
+      assert.equal((await complete(d, true, "/")).ok, false);
+      await flush();
       assert.equal(closedTabs.includes(718), false);
     });
-    await t.test("cleanup cannot leave an orphaned activation bit behind a delayed write", async () => {
-      const d = seed("delayed-veto", 708, "confirmed");
-      const key = `target-activated:${d.id}`;
-      const blocked = pauseWrite(key);
-      visit(708);
-      const completion = complete(d, true, "/");
-      await tick();
-      blocked.release();
-      assert.deepEqual(await completion, { ok: true });
-      assert.equal(session.has(key), false);
-    });
-    await t.test("unrelated activations in a warm worker do not touch storage", async () => {
-      await assertNoStorage(() => { for (let i = 8000; i < 8010; i++) visit(i); });
-    });
-    for (const [i, phase] of ["after-click", "cleanup", "deferred", "tabs.get"].entries()) {
-      await t.test(`a visit during ${phase} preserves submitted status without removal`, async () => {
-        const tabId = 710 + i;
-        const d = seed(`visit-${phase}`, tabId, "submitting");
-        if (phase === "after-click") visit(tabId);
-        assert.deepEqual(await transition(d, "confirm-dispatch"), { ok: true });
-        if (phase === "after-click") assert.equal(session.get(`target-activated:${d.id}`), true);
-        if (phase === "cleanup") hooks.afterRemove = keys => { if (keys.includes(`dispatch:${d.id}`)) visit(tabId); };
-        if (phase === "tabs.get") hooks.afterTabGet = visit;
-        const flushCloses = deferredCloses();
-        assert.deepEqual(await complete(d, true, "/"), { ok: true });
-        if (phase === "deferred") visit(tabId);
-        await flushCloses();
-        assert.equal(badge(d.sourceTabId!), "✓");
-        assert.equal(closedTabs.includes(tabId), false);
-      });
-    }
     await t.test("target failure cannot replace a newer source status, even during its queued write", async () => {
       const d = seed("now-a-source", 720, "claimed");
       const blocked = pauseWrite("source-status:720");
@@ -1020,35 +881,6 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
       }
       assert.deepEqual(actual, cases.map(([, , expected]) => expected));
     });
-    const firstWorker = messageListener;
-    await t.test("a failed activation write cannot authorize a restarted worker, even behind a transition", async () => {
-      const pending = seed("failed-veto", 820, "pending");
-      const confirmed = seed("failed-veto-confirmed", 821, "confirmed");
-      const blocked = seed("failed-veto-blocked", 822, "claimed");
-      const write = pauseWrite(`dispatch:${blocked.id}`, "target-activated:");
-      const arm = transition(blocked, "arm-dispatch");
-      await write.waitUntilBlocked();
-      for (const tabId of [820, 821, 822]) visit(tabId);
-      await tick();
-
-      // Start a fresh copy of the production worker against the same session storage.
-      await restartWorker();
-      assert.notEqual(messageListener, firstWorker);
-      const pendingResult = await transition(pending, "claim-dispatch");
-      // Do not allow the restarted worker to wait on a new arm write if it erroneously grants it.
-      hooks.beforeWrite = undefined;
-      const blockedResult = await transition(blocked, "arm-dispatch");
-      write.release();
-      assert.equal((await arm).ok, false);
-      assert.equal(pendingResult.ok, false);
-      assert.equal(blockedResult.ok, false);
-      await tick();
-      for (const d of [pending, confirmed, blocked]) {
-        assertAbsent(`dispatch:${d.id}`, `tab-dispatch:${d.targetTabId}`, `target-activated:${d.id}`);
-      }
-      assert.equal(badge(confirmed.sourceTabId!), "✓");
-      assert.equal(badge(confirmed.targetTabId!), undefined);
-    });
     await t.test("cleared newer status still suppresses an older target after a fresh worker starts", async () => {
       const older = seed("older-after-restart", 875, "claimed");
       sharePage(875, "newer");
@@ -1093,52 +925,6 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
         assert.equal(reads(), warm, "the warm source path must not look up the binding");
       });
     }
-    await t.test("a visit after a failed startup scan vetoes close in the next worker, even before recovery finishes", async () => {
-      const d = seed("visit-after-failed-scan", 890, "confirmed");
-
-      const retry = gate();
-      hooks.beforeRead = keys => { if (keys === null) return retry.wait; };
-      failReads(keys => keys === null, 1);
-      failReads(keys => keys === "tab-dispatch:890", 1);
-      await restartWorker();
-      visit(890);
-      await tick();
-      hooks.beforeRead = undefined;
-      currentLocation = { status: "complete", url: "https://chatgpt.com/" };
-      const flushCloses = deferredCloses();
-      await restartWorker();
-      try {
-        assert.deepEqual(await complete(d, true, "/"), { ok: true });
-        await flushCloses();
-        assert.equal(closedTabs.includes(890), false);
-        assert.equal(session.has(`target-activated:${d.id}`), false);
-      } finally { retry.release(); }
-    });
-    await t.test("a cold activation lookup cannot veto a reassigned or already consumed binding", async () => {
-      const removed = seed("cold-removed", 893, "confirmed");
-      const replaced = seed("cold-replaced", 894, "confirmed");
-      const scan = gate(), lookup = gate();
-      let pendingValidations = 0;
-      hooks.beforeRead = keys => { if (keys === null) return scan.wait; };
-      hooks.afterRead = keys => {
-        if (Array.isArray(keys) && (keys.includes("tab-dispatch:893") || keys.includes("tab-dispatch:894"))) {
-          pendingValidations++;
-          return lookup.wait;
-        }
-      };
-      await restartWorker();
-      try {
-        visit(893); visit(894);
-        await waitUntil(() => pendingValidations === 2);
-        await storageArea.remove([`dispatch:${removed.id}`, "tab-dispatch:893"]);
-        const replacement: DispatchPayload = { ...replaced, id: "replacement-after-cold-visit", status: "pending" };
-        await storageArea.set({ [`dispatch:${replacement.id}`]: replacement, "tab-dispatch:894": replacement.id });
-        lookup.release();
-        await tick();
-        assertAbsent(`target-activated:${removed.id}`, `target-activated:${replaced.id}`);
-        assert.equal((await transition(replacement, "claim-dispatch")).ok, true);
-      } finally { lookup.release(); scan.release(); await tick(); }
-    });
     await t.test("a persistent repair failure backs off without replaying siblings or blocking a fresh share", async () => {
       const d = seed("persistently-unreadable", 895, "confirmed");
       const healthy = seed("sibling-deadline", 896, "claimed");
@@ -1155,12 +941,11 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
       await tick();
       assert.equal(failures(), 3);
       assert.equal(scheduledTimers.length, beforeRetry);
-      unrelatedVisits();
       const fresh = await nextShare(897, "during-fault");
       assert.equal((await transition(fresh, "claim-dispatch")).ok, true);
     });
     for (const fault of ["scan", "repair"] as const) {
-      await t.test(`one transient startup ${fault} error still restores deadlines and releases the cold visit buffer`, async () => {
+      await t.test(`one transient startup ${fault} error still restores deadlines`, async () => {
         const d = seed(`retry-${fault}`, 891, "confirmed");
         const attempts = failReads(keys => fault === "scan" ? keys === null : Array.isArray(keys) && keys.includes(`dispatch:${d.id}`), 1);
         const timers = await restartTimers();
@@ -1169,7 +954,6 @@ test("the background dispatch lifecycle binds, advances, and consumes state", as
         timers.filter(timer => (timer.delay ?? 0) > 2000).forEach(timer => timer.callback());
         await tick();
         assert.equal(session.has(`dispatch:${d.id}`), false, "the live deadline must have been restored");
-        await assertNoStorage(unrelatedVisits);
         const dispatched = await nextShare(892, "after-retry");
         assert.equal((await transition(dispatched, "claim-dispatch")).ok, true);
       });
